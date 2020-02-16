@@ -316,10 +316,10 @@ let perform_op(op, vm) =
 let perform_unary(op, vm) = 
     let (v, vm1) = pop_top vm in push(do_unary(op, v), vm1) 
 
-let rec find l y =
-  match l with
-  | [] -> Errors.complain ("Compile.find : " ^ y ^ " is not found")
-  | (x, v) :: rest -> if x = y then v else find rest y
+
+let rec alreadyCopied y = function
+  | [] -> None
+  | (x,v) :: rest -> if x = y then Some v else alreadyCopied y rest
 
 (* implement garbage collection! 
     
@@ -338,15 +338,35 @@ let rec find l y =
 let heap1 = Array.make Option.heap_max (HEAP_INT 0)
 let heap2 = Array.make Option.heap_max (HEAP_INT 0)
 let swapping = ref false
+let new_hp = ref 0
 
-(* Current plan is to keep list of copied addresses and their destinations, access by 'find list addr'. *)
-(* Just scan down stack with recursive calls to copy not yet copied items *)
 (* In future, will add GC flag/ptr to all heap items to avoid needing list *)
-(* If this fails, will just crash, so can manipulate sp etc. as much as needed, as long as they get copied to vm2 *)
+
+(* TODO: Remove some of the refs, pass as arguments instead, keep functional *)
+let rec heap_copy vm copy marked addr = match alreadyCopied addr marked with
+  | Some a -> (marked, a)
+  | None -> match vm.heap.(addr) with
+    (* Order important in case cycles present on heap *)
+    | HEAP_HI hi -> let a = !new_hp in
+                    let (marked', hi') = (new_hp := !new_hp + 1; heap_copy vm copy ((addr,a)::marked) hi)
+                    in (copy.(a) <- (HEAP_HI hi'); (marked', a))
+    | HEAP_HEADER (n, t) -> let a = !new_hp in let _ = (new_hp := !new_hp + 1; copy.(a) <- HEAP_HEADER (n,t)) in
+      let rec aux marked i = if i = n then marked
+        else let _ = heap_copy vm copy marked (addr + i) in aux marked (i+1) (* Enclosed under header so no need to update marked *)
+      in (aux ((addr, a)::marked) 1, a)
+    | item -> let a = !new_hp in (new_hp := !new_hp + 1; copy.(a) <- item; ((addr,a)::marked, a))
+
+let rec scan_stack vm copy marked n = if n < 0 then (vm, marked)
+  else match vm.stack.(n) with
+  | STACK_HI hi -> let (marked', a) = heap_copy vm copy marked hi in
+      (vm.stack.(n) <- STACK_HI a; scan_stack vm copy marked' (n-1))
+  | _ -> scan_stack vm copy marked (n-1)
+
 let invoke_garbage_collection vm =
-  let (from, copy) = if (swapping := not (!swapping); !swapping) then (heap1, heap2) else (heap2, heap1) in
-  let new_hp = ref 0 in
-  None
+  let copy = (if (swapping := not (!swapping); !swapping) then heap2 else heap1) in
+  let _ = new_hp := 0 in
+  let _ = scan_stack vm copy [] (vm.sp-1) in
+  if (!new_hp) < vm.hp then Some {vm with hp = !new_hp; heap = copy} else None
 
 let allocate(n, vm) = 
     let hp1 = vm.hp in 
@@ -359,8 +379,6 @@ let allocate(n, vm) =
           then (vm2.hp, { vm2 with hp = vm2.hp + n })  
           else Errors.complain "allocate : heap exhausted"
 
-
-
 let mk_tuple (n, vm) =
     let (a, vm1) = allocate(1 + n, vm)       in
     let _ = vm1.heap.(a)     <- HEAP_HEADER (1 + n, HT_TUPLE)       in
@@ -370,8 +388,6 @@ let mk_tuple (n, vm) =
              let _ = vm1.heap.(a + m + 1) <- v in aux (m + 1)
     in let _ = aux 0 in
        let vm2 = pop(n, vm1) in push(STACK_HI a, vm2)
-
-
 
 let do_index vm i =
     let (v, vm1) = pop_top vm in
@@ -535,6 +551,11 @@ let map_instruction_labels f = function
      | CASE (lab, _) -> CASE(lab, Some(f lab))
      | MK_CLOSURE ((lab, _), n) -> MK_CLOSURE((lab, Some(f lab)), n)
      | inst -> inst 
+
+let rec find l y =
+  match l with
+  | [] -> Errors.complain ("Compile.find : " ^ y ^ " is not found")
+  | (x, v) :: rest -> if x = y then v else find rest y
 
 (* put code listing into an array, associate an array index to each label *) 
 let load instr_list = 
