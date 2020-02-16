@@ -326,7 +326,13 @@ let perform_unary(op, vm) =
    Result: 
    None = no progress 
    Some(vm') = progress made, resulting in vm'
-*) 
+*)
+(* Idea - create a copy collector. Return {vm with heap = copy}
+ Potentially use flag to keep swapping between the same 2 arrays.
+ Array.make Option.heap_max (HEAP_INT 0) *)
+let heap1 = Array.make Option.heap_max (HEAP_INT 0)
+let heap2 = Array.make Option.heap_max (HEAP_INT 0)
+
 let invoke_garbage_collection vm  = None 
 
 let allocate(n, vm) = 
@@ -548,7 +554,7 @@ let initial_state l =
     heap_bound = Option.heap_max; 
     code_bound = c_bound; 
     stack = Array.make Option.stack_max (STACK_INT 0);
-    heap = Array.make Option.heap_max (HEAP_INT 0);
+    heap = heap1;
     code = code_array; 
     sp = 0; 
     fp = 0; 
