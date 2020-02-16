@@ -316,6 +316,11 @@ let perform_op(op, vm) =
 let perform_unary(op, vm) = 
     let (v, vm1) = pop_top vm in push(do_unary(op, v), vm1) 
 
+let rec find l y =
+  match l with
+  | [] -> Errors.complain ("Compile.find : " ^ y ^ " is not found")
+  | (x, v) :: rest -> if x = y then v else find rest y
+
 (* implement garbage collection! 
     
    This should free up all heap space 
@@ -332,8 +337,16 @@ let perform_unary(op, vm) =
  Array.make Option.heap_max (HEAP_INT 0) *)
 let heap1 = Array.make Option.heap_max (HEAP_INT 0)
 let heap2 = Array.make Option.heap_max (HEAP_INT 0)
+let swapping = ref false
 
-let invoke_garbage_collection vm  = None 
+(* Current plan is to keep list of copied addresses and their destinations, access by 'find list addr'. *)
+(* Just scan down stack with recursive calls to copy not yet copied items *)
+(* In future, will add GC flag/ptr to all heap items to avoid needing list *)
+(* If this fails, will just crash, so can manipulate sp etc. as much as needed, as long as they get copied to vm2 *)
+let invoke_garbage_collection vm =
+  let (from, copy) = if (swapping := not (!swapping); !swapping) then (heap1, heap2) else (heap2, heap1) in
+  let new_hp = ref 0 in
+  None
 
 let allocate(n, vm) = 
     let hp1 = vm.hp in 
@@ -522,12 +535,6 @@ let map_instruction_labels f = function
      | CASE (lab, _) -> CASE(lab, Some(f lab))
      | MK_CLOSURE ((lab, _), n) -> MK_CLOSURE((lab, Some(f lab)), n)
      | inst -> inst 
-
-let rec find l y = 
-  match l with 
-  | [] -> Errors.complain ("Compile.find : " ^ y ^ " is not found")
-  | (x, v) :: rest -> if x = y then v else find rest y 
-
 
 (* put code listing into an array, associate an array index to each label *) 
 let load instr_list = 
