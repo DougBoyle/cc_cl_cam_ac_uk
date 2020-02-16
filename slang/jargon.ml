@@ -338,35 +338,33 @@ let rec alreadyCopied y = function
 let heap1 = Array.make Option.heap_max (HEAP_INT 0)
 let heap2 = Array.make Option.heap_max (HEAP_INT 0)
 let swapping = ref false
-let new_hp = ref 0
 
 (* In future, will add GC flag/ptr to all heap items to avoid needing list *)
 
 (* TODO: Remove some of the refs, pass as arguments instead, keep functional *)
-let rec heap_copy vm copy marked addr = match alreadyCopied addr marked with
-  | Some a -> (marked, a)
+let rec heap_copy vm copy hp marked addr = match alreadyCopied addr marked with
+  | Some a -> (hp, marked, a)
   | None -> match vm.heap.(addr) with
     (* Order important in case cycles present on heap *)
-    | HEAP_HI hi -> let a = !new_hp in
-                    let (marked', hi') = (new_hp := !new_hp + 1; heap_copy vm copy ((addr,a)::marked) hi)
-                    in (copy.(a) <- (HEAP_HI hi'); (marked', a))
-    | HEAP_HEADER (n, t) -> let a = !new_hp in let _ = (new_hp := !new_hp + 1; copy.(a) <- HEAP_HEADER (n,t)) in
-      let rec aux marked i = if i = n then marked
-        else let _ = heap_copy vm copy marked (addr + i) in aux marked (i+1) (* Enclosed under header so no need to update marked *)
-      in (aux ((addr, a)::marked) 1, a)
-    | item -> let a = !new_hp in (new_hp := !new_hp + 1; copy.(a) <- item; ((addr,a)::marked, a))
+    | HEAP_HI hi -> let a = hp in
+                    let (hp', marked', hi') = heap_copy vm copy (hp+1) ((addr,a)::marked) hi
+                    in (copy.(a) <- (HEAP_HI hi'); (hp', marked', a))
+    | HEAP_HEADER (n, t) -> let a = hp in let _ =  copy.(a) <- HEAP_HEADER (n,t) in
+      let rec aux hp marked i = if i = n then hp
+        else let (hp', _, _) = heap_copy vm copy hp marked (addr + i) in aux hp' marked (i+1) (* Enclosed under header so no need to update marked *)
+      in (aux (hp+1) ((addr, a)::marked) 1, ((addr, a)::marked), a)
+    | item -> let a = hp in (copy.(a) <- item; (hp+1, (addr,a)::marked, a))
 
-let rec scan_stack vm copy marked n = if n < 0 then (vm, marked)
+let rec scan_stack vm copy hp marked n = if n < 0 then hp
   else match vm.stack.(n) with
-  | STACK_HI hi -> let (marked', a) = heap_copy vm copy marked hi in
-      (vm.stack.(n) <- STACK_HI a; scan_stack vm copy marked' (n-1))
-  | _ -> scan_stack vm copy marked (n-1)
+  | STACK_HI hi -> let (hp', marked', a) = heap_copy vm copy hp marked hi in
+      (vm.stack.(n) <- STACK_HI a; scan_stack vm copy hp' marked' (n-1))
+  | _ -> scan_stack vm copy hp marked (n-1)
 
 let invoke_garbage_collection vm =
   let copy = (if (swapping := not (!swapping); !swapping) then heap2 else heap1) in
-  let _ = new_hp := 0 in
-  let _ = scan_stack vm copy [] (vm.sp-1) in
-  if (!new_hp) < vm.hp then Some {vm with hp = !new_hp; heap = copy} else None
+  let hp = scan_stack vm copy 0 [] (vm.sp-1) in
+  if hp < vm.hp then Some {vm with hp = hp; heap = copy} else None
 
 let allocate(n, vm) = 
     let hp1 = vm.hp in 
