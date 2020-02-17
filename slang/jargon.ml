@@ -332,28 +332,22 @@ let rec alreadyCopied y = function
    None = no progress 
    Some(vm') = progress made, resulting in vm'
 *)
-(* Idea - create a copy collector. Return {vm with heap = copy}
- Potentially use flag to keep swapping between the same 2 arrays.
- Array.make Option.heap_max (HEAP_INT 0) *)
 let heap1 = Array.make Option.heap_max (HEAP_INT 0)
 let heap2 = Array.make Option.heap_max (HEAP_INT 0)
 let swapping = ref false
 
 (* In future, will add GC flag/ptr to all heap items to avoid needing list *)
-
-(* TODO: Remove some of the refs, pass as arguments instead, keep functional *)
 let rec heap_copy vm copy hp marked addr = match alreadyCopied addr marked with
   | Some a -> (hp, marked, a)
   | None -> match vm.heap.(addr) with
-    (* Order important in case cycles present on heap *)
-    | HEAP_HI hi -> let a = hp in
-                    let (hp', marked', hi') = heap_copy vm copy (hp+1) ((addr,a)::marked) hi
-                    in (copy.(a) <- (HEAP_HI hi'); (hp', marked', a))
-    | HEAP_HEADER (n, t) -> let a = hp in let _ =  copy.(a) <- HEAP_HEADER (n,t) in
+    | HEAP_HI hi -> let (hp', marked', hi') = heap_copy vm copy (hp+1) ((addr,hp)::marked) hi
+                    in (copy.(hp) <- (HEAP_HI hi'); (hp', marked', hp))
+    | HEAP_HEADER (n, t) ->
       let rec aux hp marked i = if i = n then hp
-        else let (hp', _, _) = heap_copy vm copy hp marked (addr + i) in aux hp' marked (i+1) (* Enclosed under header so no need to update marked *)
-      in (aux (hp+1) ((addr, a)::marked) 1, ((addr, a)::marked), a)
-    | item -> let a = hp in (copy.(a) <- item; (hp+1, (addr,a)::marked, a))
+        else let (hp', _, _) = heap_copy vm copy hp marked (addr + i) in aux hp' marked (i+1) in
+      let hp' =  (copy.(hp) <- HEAP_HEADER (n,t); aux (hp+1) ((addr, hp)::marked) 1) in
+        (hp', ((addr, hp)::marked), hp)
+    | item -> (copy.(hp) <- item; (hp+1, (addr,hp)::marked, hp))
 
 let rec scan_stack vm copy hp marked n = if n < 0 then hp
   else match vm.stack.(n) with
