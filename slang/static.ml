@@ -78,13 +78,13 @@ match (t1, t2) with
   | (TEany tr, t2) -> (match !tr with
                       | Bound t -> match_types(t, t2)
                       | Free _ -> (match t2 with
-                        | TEany tr2 -> if tr = tr2 then true else (tr := Bound(t2); occurs_check tr t2)
-                        | _ -> (tr := Bound(t2); occurs_check tr t2)))
+                        | TEany tr2 -> if tr = tr2 then true else (if occurs_check tr t2 then (tr := Bound(t2); true) else false)
+                        | _ -> if occurs_check tr t2 then (tr := Bound(t2); true) else false))
   | (t1, TEany tr) -> (match !tr with
                       | Bound t -> match_types(t1, t)
                       | Free _ -> (match t1 with
-                        | TEany tr2 -> if tr2 = tr then true else (tr := Bound(t1); occurs_check tr t1)
-                        | _ -> (tr := Bound(t1); occurs_check tr t1)))
+                        | TEany tr2 -> if tr2 = tr then true else (if occurs_check tr t1 then (tr := Bound(t1); true) else false)
+                        | _ -> if occurs_check tr t1 then (tr := Bound(t1); true) else false))
   | (TEref t1, TEref t2) -> match_types (t1, t2)
   | (TEarrow(t1, t2), TEarrow(t3, t4)) -> match_types (t1, t3) && match_types (t2, t4)
   | (TEunion(t1, t2), TEunion(t3, t4)) -> match_types (t1, t3) && match_types (t2, t4)
