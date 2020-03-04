@@ -66,7 +66,7 @@ int64_t giria(arena_t);
 /* of value it is ...                                                  */
 int main() {
   arena_t heap = create_arena(1024);
-  printf("%ld\n", giria(heap));
+  printf("%ld\n", giria(heap)/2); /* Div by 2 to undo encoding of int/bools */
   arena_free (heap);   
   return 0;
 }

@@ -20,7 +20,7 @@ A few comments on the code below:
 
 -- No optimisations have been implemented. 
 -- No garbage collection is implemented. Heap allocated 
-   records do not yet have headers. 
+   records do not yet have headers. - Tags have a 0 or 1 to indicate INL / INR i.e. has type but not size field
 -- runtime system only prints out integers correctly. 
    This is related to having no headers. Discuss. 
 -- the scratch register %r11 is used to hold a pointer to 
@@ -35,6 +35,17 @@ A few comments on the code below:
 -- "giria" means "slang" in Portuguese. 
 
  *****************************************)
+
+ (* TODO: Add headers for heap and distinguish stack/heap items correctly *)
+ (* Integers will end in 1, pointers in 0 (all headers will be even aligned by malloc of even sizes) *)
+ (* Need to do x -> 2x + 1 or x -> x >> 2 for most integer operations *)
+ (* Booleans will be 1 and 3 by same convention, can leave unit as 0 since 0 = null? *)
+ (* Use the larger of sizeof(int) and sizeof(size_t) as the size of a cell, can hold and int or a ptr *)
+ (* Actually - just make everyting 8 bytes for now, solves issue. Assume last 4 bits are int_32 where necessary *)
+ (* Default behaviour of pushq as q = quad i.e. 8 bytes *)
+ (* Align to an even number of this size *)
+ (* Header will be 2 times this size, hold an integer flag and an int for the size of the whole header (i.e. malloc arg) *)
+ (* TODO: Add GC to runtime based on the headers *)
 let complain = Errors.complain 
   
 let emit_x86 e =
@@ -66,19 +77,21 @@ let emit_x86 e =
 		    cmd "movq $0,%rax" "signal no floating point args";
 		    cmd "pushq %r11"   "%r11 is caller-saved "; 
 		    cmd "call read"    "get user input";
-		    cmd "popq %r11"    "restore %r11"; 		    
+		    cmd "popq %r11"    "restore %r11";
+   (*     cmd "salq $1, %rax"   "double integer";
+        cmd "orq $1, %rax"   "x -> 2x+1 for encoding integers"; *)
 		    cmd "pushq %rax"   "END read, a C-call, so result in %rax \n");
 
     in let eq () =(let l1 = new_label () in  (* label for not = *) 
 		   let l2 = new_label () in  (* label for exit *) 
 		  (cmd "popq %rax"         "BEGIN EQ, pop into %rax";
-                   cmd "popq %r10"         "pop into %r10";
-		   cmd "cmp %r10,%rax"     "compare values";
+       cmd "popq %r10"         "pop into %r10";
+		   cmd "cmp %r10,%rax"     "compare values"; (* Still works with new int encoding *)
 		   cmd ("jne " ^ l1)       "jump if not equal";
-		   cmd "pushq $1"          "push true";
+		   cmd "pushq $3"          "push true";
 		   cmd ("jmp " ^ l2)       "jump to exit label";
 		   label l1;
-		   cmd "pushq $0"          "END EQ, push false \n";
+		   cmd "pushq $1"          "END EQ, push false \n";
 		   label l2))
 		    
     in let binary = function
@@ -90,35 +103,46 @@ let emit_x86 e =
 		  let l2 = new_label () in  (* label for exit *) 
 		  (cmd "popq %rax"         "BEGIN equal, pop into %rax";
                    cmd "popq %r10"         "pop into %r10";
-		   cmd "cmp %rax,%r10"     "compare values";
+		   cmd "cmp %rax,%r10"     "compare values"; (* Still works in new encoding *)
 		   cmd ("jge " ^ l1)       "jump if not(%r10 < %rax) = %rax >= %r10";
-		   cmd "pushq $1"          "push true";
+		   cmd "pushq $3"          "push true";
 		   cmd ("jmp " ^ l2)       "jump to exit label";
 		   label l1;
-		   cmd "pushq $0"          "END EQI, push false \n";
+		   cmd "pushq $1"          "END EQI, push false \n";
 		   label l2))
 		   
 	 | EQB -> eq ()
 		     
 	 | EQI -> eq ()
 		     
-	 | ADD -> (cmd "popq %rax"         "BEGIN add, pop top-of-stack to %rax"; 
+	 | ADD -> (cmd "popq %rax"   "BEGIN add, pop top-of-stack to %rax";
+	     cmd "subq $1, %rax"      "Take 1 off of second arg to keep int encoding correct";
 		   cmd "addq %rax,(%rsp)"  "END add, add %rax to top-of-stack \n")
 		    
-	 | SUB -> (cmd "popq %rax"         "BEGIN sub, pop top-of-stack to %rax"; 
+	 | SUB -> (cmd "popq %rax"         "BEGIN sub, pop top-of-stack to %rax";
+	     cmd "subq $1, %rax"     "Take one of second arg to keep int encoding";
 		   cmd "subq %rax,(%rsp)"  "END sub, subtract %rax from top-of-stack \n")
 		    
 	 | MUL -> (cmd "popq %rax"         "BEGIN mul, pop arg 1 to %rax";
-		   cmd "popq %r10"         "pop arg 2 to %r10"; 
-		   cmd "imulq %r10"        "multiply %r10 by %rax, result in %rax"; 
+	     cmd "sarq $1, %rax"     "Decode first arg"; (* TODO: Is arithmetic shift correct here? *)
+		   cmd "popq %r10"         "pop arg 2 to %r10";
+		   cmd "sarq $1, %r10"     "Decode first arg";
+		   cmd "imulq %r10"        "multiply %r10 by %rax, result in %rax";
+		   cmd "salq $1, %rax"     "Encode result";
+       cmd "addq $1, %r10"     "Encode result";
 		   cmd "pushq %rax"        "END mul, push result \n")
 		    
 	 | DIV -> (cmd "popq %r10"         "BEGIN div, , pop top-of-stack to %r10";
-		   cmd "popq %rax"         "pop divisor into %rax"; 
+	     cmd "sarq $1, %r10"     "Decode first arg";
+		   cmd "popq %rax"         "pop divisor into %rax";
+		   cmd "sarq $1, %rax"     "Decode second arg";
 		   cmd "cqto"              "prepare for div (read x86 docs!)";		   
-		   cmd "idivq %r10"        "do the div, result in %rax"; 
+		   cmd "idivq %r10"        "do the div, result in %rax";
+		   cmd "salq $1, %rax"     "Encode result";
+       cmd "addq %r10, $1"     "Encode result";
 		   cmd "pushq %rax"        "END div, push result \n")
 
+(* Int encoding done up to here *)
 
     in let index i = (let m = string_of_int (8 * (i-1)) in (cmd "movq (%rsp),%rax"  "BEGIN INDEX, copy heap pointer";
                                 cmd ("movq " ^ m ^ "(%rax), %r10") "copy element to scratch register";
@@ -153,7 +177,7 @@ let emit_x86 e =
 	 cmd "movq 8(%rax),%r10"    "get the value";
 	 cmd "pushq %r10"           "push the value"; 	 	 
 	 cmd "movq (%rax),%r10"     "get tag"; 
-	 cmd "cmpq $0,%r10"         "compare tag to inl tag"; 
+	 cmd "cmpq $0,%r10"         "compare tag to inl tag"; (* 0 or 1 *)
 	 cmd ("jne " ^ l)           "END case, jump if not equal \n")
 
   in let stack_lookup i =
@@ -163,7 +187,7 @@ let emit_x86 e =
          (cmd ("movq " ^ j ^ "(%rbp)" ^ ",%r10") "BEGIN stack lookup, index off of base pointer";
 	  cmd "pushq %r10"                       "END stack lookup, push value \n"))
 	                        
-   in let heap_lookup i =
+   in let heap_lookup i = (* Variable bound in closure's environment *)
 	(let j = string_of_int (8 * i) in  	   
 	 (cmd "movq 8(%rbp), %rax"               "BEGIN heap lookup, copy closure pointer to %rax";
  	  cmd ("movq " ^ j ^ "(%rax)" ^ ",%r10") ("put closue value at index " ^ (string_of_int i) ^ " in scratch register");
@@ -171,7 +195,7 @@ let emit_x86 e =
 
    in let test l = 
 	(cmd "popq %rax"            "BEGIN test, pop stack-top into %rax";
-	 cmd "cmp $1,%rax"          "compare to value of true"; 
+	 cmd "cmp $3,%rax"          "compare to value of true";
 	 cmd ("jne " ^ l)           "END test, jump if not equal \n")
 
    in let goto l = cmd ("jmp " ^ l) ""
@@ -272,9 +296,9 @@ let emit_x86 e =
 	  | LOOKUP (STACK_LOCATION offset) -> stack_lookup (0 - offset) (* stack grows downward, so negate offsets *) 
 	  | LOOKUP (HEAP_LOCATION offset)  -> heap_lookup offset			      
 	  | POP                     -> cmd "addq $8, %rsp" "pop stack \n"
-	  | PUSH (STACK_INT i)      -> cmd ("pushq $" ^ (string_of_int i)) "push int \n"
-	  | PUSH (STACK_BOOL true)  -> cmd "pushq $1" "push true \n"
-	  | PUSH (STACK_BOOL false) -> cmd "pushq $0" "push false \n"
+	  | PUSH (STACK_INT i)      -> cmd ("pushq $" ^ (string_of_int (2*i+1))) "push int \n"
+	  | PUSH (STACK_BOOL true)  -> cmd "pushq $3" "push true \n"
+	  | PUSH (STACK_BOOL false) -> cmd "pushq $1" "push false \n"
 	  | PUSH STACK_UNIT         -> cmd "pushq $0" "push false \n"
 	  | PUSH (STACK_HI i)       -> complain "Internal Error : Jargon code never explicitly pushes stack pointer"
 	  | PUSH (STACK_RA i)       -> complain "Internal Error : Jargon code never explicitly pushes return address"
