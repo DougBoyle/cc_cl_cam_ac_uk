@@ -33,9 +33,8 @@ void arena_free(arena_t a)
 
 int64_t *alloc(arena_t heap, int64_t n)
 {
-  //printf("Called");
   if (heap->size < heap->current +n) {
-    fprintf(stderr, "heap space exhausted(\n");
+    fprintf(stderr, "heap space exhausted(\n"); // may cause a seg fault
     exit(1);
   }
   int64_t *new_record = heap->elements + heap->current;
@@ -67,7 +66,7 @@ int64_t giria(arena_t);
 /* of value it is ...                                                  */
 int main() {
   arena_t heap = create_arena(1024);
-  printf("%ld\n", giria(heap)/2); /* Div by 2 to undo encoding of int/bools */
+   printf("%ld\n", giria(heap) >> 1); /* Shift to decode (div by 2 would round negatives incorrectly) */
   arena_free (heap);   
   return 0;
 }

@@ -69,9 +69,17 @@ let emit_x86 e =
     in let label l = output_string out_chan (l ^ ":\n")
 				      
     in let unary = function
-	 | NOT -> complain "NOT: not yet implemented in x86"
+	 | NOT ->  (cmd "popq %rax"         "BEGIN equal, pop into %rax";
+          cmd "movq $4, %r10"         "put 4 in %r10";
+          cmd "subq %rax, %r10"     "negate (3 = true, 1 = false)"; (* new encoding *)
+          cmd "pushq %r10"          "push result")
 				  
-	 | NEG -> complain "NEG: not yet implemented in x86"
+	 | NEG -> (cmd "popq %rax"         "BEGIN neg, pop top-of-stack to %rax";
+	     cmd "sarq $1, %rax"     "Decode arg";
+       cmd "neg %rax"     "negate value";
+       cmd "salq $1, %rax"     "Encode result";
+       cmd "addq $1, %rax"     "Encode result";
+       cmd "pushq %rax"  "END sub, push %rax \n")
 				  
 	 | READ -> (cmd "popq %rdi"    "BEGIN read, put arg in %rdi";
 		    cmd "movq $0,%rax" "signal no floating point args";
@@ -103,7 +111,7 @@ let emit_x86 e =
 	 | LT -> (let l1 = new_label () in  (* label for not < *) 
 		  let l2 = new_label () in  (* label for exit *) 
 		  (cmd "popq %rax"         "BEGIN equal, pop into %rax";
-                   cmd "popq %r10"         "pop into %r10";
+       cmd "popq %r10"         "pop into %r10";
 		   cmd "cmp %rax,%r10"     "compare values"; (* Still works in new encoding *)
 		   cmd ("jge " ^ l1)       "jump if not(%r10 < %rax) = %rax >= %r10";
 		   cmd "pushq $3"          "push true";
@@ -130,7 +138,7 @@ let emit_x86 e =
 		   cmd "sarq $1, %r10"     "Decode first arg";
 		   cmd "imulq %r10"        "multiply %r10 by %rax, result in %rax";
 		   cmd "salq $1, %rax"     "Encode result";
-       cmd "addq $1, %r10"     "Encode result";
+       cmd "addq $1, %rax"     "Encode result";
 		   cmd "pushq %rax"        "END mul, push result \n")
 		    
 	 | DIV -> (cmd "popq %r10"         "BEGIN div, , pop top-of-stack to %r10";
