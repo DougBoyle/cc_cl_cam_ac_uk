@@ -33,6 +33,7 @@ void arena_free(arena_t a)
 
 int64_t *alloc(arena_t heap, int64_t n)
 {
+  //printf("Called");
   if (heap->size < heap->current +n) {
     fprintf(stderr, "heap space exhausted(\n");
     exit(1);
@@ -51,7 +52,7 @@ int64_t read() {
     fprintf(stderr, "stdin died :(\n");
     exit(1);
   }
-  return got;
+  return got*2 + 1; // encoding of ints with 1 at end
 }
 
 /* this is the name given to the compiled slang code. */

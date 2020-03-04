@@ -75,11 +75,12 @@ let emit_x86 e =
 				  
 	 | READ -> (cmd "popq %rdi"    "BEGIN read, put arg in %rdi";
 		    cmd "movq $0,%rax" "signal no floating point args";
-		    cmd "pushq %r11"   "%r11 is caller-saved "; 
+		    cmd "pushq %r11"   "%r11 is caller-saved ";
+		    cmd "pushq %rbp"         "save the frame pointer";
+        cmd "movq %rsp,%rbp"     "set new frame pointer";
 		    cmd "call read"    "get user input";
-		    cmd "popq %r11"    "restore %r11";
-   (*     cmd "salq $1, %rax"   "double integer";
-        cmd "orq $1, %rax"   "x -> 2x+1 for encoding integers"; *)
+		    cmd "popq %rbp"          "retore base pointer";
+        cmd "popq %r11"    "restore %r11";
 		    cmd "pushq %rax"   "END read, a C-call, so result in %rax \n");
 
     in let eq () =(let l1 = new_label () in  (* label for not = *) 
