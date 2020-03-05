@@ -14,9 +14,7 @@ struct arena
   int64_t* elements;
 };
 
-
-// TODO: Test with size 20, set back to 1024 at end
-int ARENA_SIZE = 32;
+int ARENA_SIZE = 1024;
 
 arena_t create_arena(int size)
 {
@@ -87,7 +85,10 @@ int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
   if (newAddr == NULL){
     int64_t size = *addr;
     newAddr = heap->elements + copyHeap->current;
-    int64_t *copyTo = alloc(copyHeap, size); // updates 'current'
+    // updates 'current'
+    int64_t *copyTo = copyHeap->elements + copyHeap->current;
+    copyHeap->current = copyHeap->current + size;
+
     copied = cons(addr, newAddr, copied);
     // copy elements of the heap item
     *copyTo = size;
@@ -106,10 +107,11 @@ int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
 }
 
 arena_t copyHeap;
-void garbage_collect(struct arena * const heap, arena_t* metaptr) {
+void garbage_collect(struct arena * const heap) {
 // for now just try making heap larger
  //  heap->size = ARENA_SIZE;
   printf("GC called\n");
+
   copied = (list)NULL;
   copyHeap->current = 0; // reset working space
   heapBottom = heap->elements;
@@ -122,16 +124,16 @@ void garbage_collect(struct arena * const heap, arena_t* metaptr) {
     int64_t stackVal = *stackPtr;
     if (!(stackVal & 1) && (int64_t*)stackVal >= heapBottom && (int64_t*)stackVal < heapTop){
       // stack value is actually a heap pointer
+
+      // TODO: Overwriting something it shouldn't be
       *stackPtr = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
     }
     stackPtr -= 1;
   }
 
-  memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
- /* printf("Copy complete\n");
-  printf("Updated from: %p to %p\n", heap->elements, heap->elements + ARENA_SIZE);
-  fflush(stdout);*/
-  heap->current = copyHeap->current;
+  //memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
+
+ // heap->current = copyHeap->current;
 }
 
 int64_t sp;
@@ -144,6 +146,8 @@ int64_t *alloc(arena_t heap, int64_t n)
   if (sp & 8){
     asm ("pushq %rbx" );
   }
+
+  /*
   if (heap->size < heap->current +n) {
     printf("Heap before %p %p\n", heap, &heap);
     printHeap(heap);
@@ -155,11 +159,20 @@ int64_t *alloc(arena_t heap, int64_t n)
       fprintf(stderr, "heap space exhausted\n");
       exit(1);
     }
+  }*/
+
+  // to ensure correctness, try running gc on every allocation:
+  garbage_collect(heap);
+  if (heap->size < heap->current +n){
+    fprintf(stderr, "heap space exhausted\n");
+    exit(1);
   }
 
   int64_t *new_record = heap->elements + heap->current;
 
+  printf("Got to end allocating %ld\n", n);
   heap->current = heap->current + n;
+  printHeap(heap);
   if (sp & 8){
     asm ("popq %rbx");
   }
