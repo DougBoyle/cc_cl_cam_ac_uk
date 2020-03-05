@@ -14,7 +14,9 @@ struct arena
   int64_t* elements;
 };
 
-int ARENA_SIZE = 1024;
+
+// TODO: Test with size 20, set back to 1024 at end
+int ARENA_SIZE = 1024*2;
 
 arena_t create_arena(int size)
 {
@@ -33,6 +35,7 @@ void arena_free(arena_t a)
   free(a->elements);
   free(a);
 }
+
 
 // unsure what return value should be.
 // needs to know values on stack + how to traverse
@@ -69,8 +72,8 @@ int64_t* heapTop;
 
 int64_t *alloc(arena_t heap, int64_t n);
 
+// update r11 to use the new heap
 int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
-  printf("Heap copy called\n");
   int64_t *newAddr = lookup(addr, copied);
   if (newAddr == NULL){
     int64_t size = *addr;
@@ -94,68 +97,71 @@ int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
 
 arena_t copyHeap;
 void garbage_collect(arena_t heap) {
-  printf("gc started\n");
-  fflush(stdout);
+// for now just try making heap larger
+   heap->size = ARENA_SIZE;
+
   copied = (list)NULL;
   copyHeap->current = 0; // reset working space
   heapBottom = heap->elements;
   heapTop = heapBottom + heap->size * sizeof(int64_t);
   int64_t *topOfStack;
   asm ("movq %%rbp, %0;" : "=r" (topOfStack));
-  printf("TOS: %p\n", topOfStack);
- // printf("BOS: %p\n", bottomOfStack);
   while (topOfStack > bottomOfStack){
-    printf("Go to ToS\n");
-    fflush(stdout);
     int64_t stackVal = *topOfStack;
-    printf("Gone\n");
     if (!(stackVal & 1) && (int64_t*)stackVal >= heapBottom && (int64_t*)stackVal < heapTop){
       // stack value is actually a heap pointer
-      printf("Copy pointer\n");
       *topOfStack = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
     }
     topOfStack -= 1;
   }
-  memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
-  heap->current = copyHeap->current;
-  printf("Complete\n");
+  //memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
+  printf("Copy complete\n");
   fflush(stdout);
+  //heap->current = copyHeap->current;
+
 }
 
+int64_t sp;
 
 // needs to call garbage collector
 // use memcpy for now to do swap after copy, later allow heap to swap betweeen two arenas
 int64_t *alloc(arena_t heap, int64_t n)
 {
-  /*printf("line\n");
-  fflush(stdout);*/
+  asm ("movq %%rsp, %0" : "=r" (sp) );
+  if (sp & 8){
+    asm ("pushq %rbx" );
+  }
   if (heap->size < heap->current +n) {
     printf("gc called\n");
     fflush(stdout);
     garbage_collect(heap);
-    printf("Returned\n");
-    fflush(stdout);
-    printf("heap is at: %p\n", heap);
+    printf("heap is: %p\n", heap);
     fflush(stdout);
     if (heap->size < heap->current +n){
       fprintf(stderr, "heap space exhausted\n");
-      fflush(stderr);
       exit(1);
     }
-    printf("if done\n");
-    fflush(stdout);
   }
-  /*printf("All good\n");
-  fflush(stdout);*/
+
   int64_t *new_record = heap->elements + heap->current;
+
   heap->current = heap->current + n;
-  //printf("Alloc complete\n");
-  //fflush(stdout);
+  printf("after if\n");
+  printf("Allocated to: %p\n", new_record);
+  fflush(stdout);
+  if (sp & 8){
+    asm ("popq %rbx");
+  }
+
   return new_record; 
 }
 
-/* read in an integer from the command line */ 
+/* read in an integer from the command line */
 int64_t read() {
+  asm ("movq %%rsp, %0" : "=r" (sp) );
+  if (sp & 8){
+    asm ("pushq %rbx" );
+  }
   int64_t got = 0;
   printf("> ");
   int result = scanf("%ld", &got);
@@ -163,6 +169,9 @@ int64_t read() {
     fprintf(stderr, "stdin died :(\n");
     exit(1);
   }
+  if (sp & 8){
+       asm ("popq %rbx");
+    }
   return got*2 + 1; // encoding of ints with 1 at end
 }
 
@@ -189,6 +198,7 @@ int main() {
   asm ("movq %%rsp, %0;" : "=r" (bottomOfStack));
 
   arena_t heap = create_arena(ARENA_SIZE);
+  heap->size = ARENA_SIZE/2;
   copyHeap = create_arena(ARENA_SIZE);
   printf("%ld\n", giria(heap) >> 1); /* Shift to decode (div by 2 would round negatives incorrectly) */
   arena_free (heap);

@@ -153,6 +153,7 @@ let emit_x86 e =
        cmd "addq %r10, $1"     "Encode result";
 		   cmd "pushq %rax"        "END div, push result \n")
 
+
 (* Int encoding done up to here *)
 
     in let index i = (let m = string_of_int (8 * i) in
@@ -267,7 +268,6 @@ let emit_x86 e =
           cmd "movq $0,%rax"                     "signal no floating point args";
           cmd "pushq %r11"                       "%r11 is caller-saved ";
           	  cmd "call alloc"            "... result in %rax";
-          	  cmd "popq %rbp"          "retore base pointer";
           cmd "popq %r11"                        "restore %r11";
           cmd ("movq $" ^ m ^ ",(%rax)")	       "size of heap item";
           for i = 1 to n do
@@ -336,7 +336,6 @@ let emit_x86 e =
 	tab ".type giria, @function";
 
 	output_string out_chan "giria:\n";  (* label for main body of slang program *)
-	
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
 	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
@@ -354,9 +353,10 @@ let emit_x86 e =
         close_out out_chan;
 	
 	(* compile and link with runtime.  Comment out these lines if you don't have gcc installed. *)
-	do_command "gcc -g -o runtime/c_runtime.o -c runtime/c_runtime.c"; 
+	(* mpreferred... option actually causes seg fault sooner *)
+	do_command "gcc -g -o runtime/c_runtime.o -c runtime/c_runtime.c";
         do_command ("gcc -g -o " ^ base_name ^ ".o -c " ^ base_name ^ ".s");
-        do_command ("gcc -g -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o"); 
+        do_command ("gcc -g -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o");
         do_command ("rm " ^ base_name ^ ".o");
 	()
        )
