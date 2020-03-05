@@ -65,9 +65,9 @@ let emit_x86 e =
 	 | READ -> (cmd "popq %rdi"    "BEGIN read, put arg in %rdi";
 		    cmd "movq $0,%rax" "signal no floating point args";
 		    cmd "pushq %r11"   "%r11 is caller-saved ";
-		   (* cmd "push %rbx"    "align stack on 16-byte boundary"; *)
+		    cmd "push %rbx"    "align stack on 16-byte boundary";
 		    cmd "call read"    "get user input";
-		   (* cmd "pop %rbx"     "restore stack to proper state"; *)
+		    cmd "pop %rbx"     "restore stack to proper state";
 		    cmd "popq %r11"    "restore %r11"; 		    
 		    cmd "pushq %rax"   "END read, a C-call, so result in %rax \n");
 
@@ -309,7 +309,6 @@ let emit_x86 e =
 	tab ".type giria, @function";
 
 	output_string out_chan "giria:\n";  (* label for main body of slang program *)
-	cmd "add $-8, %rsp" "Stack is misaligned by 8 otherwise";
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
 	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
@@ -319,7 +318,6 @@ let emit_x86 e =
 	cmd "popq %rax"         "END giria : place return value in %rax"; 
 	cmd "movq %rbp,%rsp"	"END giria : reset stack to previous base pointer";   
 	cmd "popq %rbp"	        "END giria : restore base pointer";
-	cmd "add $8, %rsp"      "Restore stack to proper state";
 	cmd "ret"               "END giria : return to runtime system \n";
 
         emitl defs;             (* the function definitions *)
@@ -328,9 +326,10 @@ let emit_x86 e =
         close_out out_chan;
 	
 	(* compile and link with runtime.  Comment out these lines if you don't have gcc installed. *)
-	do_command "gcc -g -mpreferred-stack-boundary=3 -o runtime/c_runtime.o -c runtime/c_runtime.c";
-        do_command ("gcc -g -mpreferred-stack-boundary=3 -o " ^ base_name ^ ".o -c " ^ base_name ^ ".s");
-        do_command ("gcc -g -mpreferred-stack-boundary=3 -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o");
+	(* mpreferred... option actually causes seg fault sooner *)
+	do_command "gcc -g -o runtime/c_runtime.o -c runtime/c_runtime.c";
+        do_command ("gcc -g -o " ^ base_name ^ ".o -c " ^ base_name ^ ".s");
+        do_command ("gcc -g -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o");
         do_command ("rm " ^ base_name ^ ".o");
 	()
        )

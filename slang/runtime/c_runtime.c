@@ -31,25 +31,41 @@ void arena_free(arena_t a)
   free(a);
 }
 
+int64_t sp;
+
 int64_t *alloc(arena_t heap, int64_t n)
 {
+  asm ("movq %%rsp, %0" : "=r" (sp) );
+  if (sp & 8){
+    asm ("pushq %rbx" );
+  }
   if (heap->size < heap->current +n) {
     fprintf(stderr, "heap space exhausted(\n");
     exit(1);
   }
   int64_t *new_record = heap->elements + heap->current;
   heap->current = heap->current + n;
+  if (sp & 8){
+    asm ("popq %rbx");
+  }
   return new_record; 
 }
 
-/* read in an integer from the command line */ 
+/* read in an integer from the command line */
 int64_t read() {
+  asm ("movq %%rsp, %0" : "=r" (sp) );
+  if (sp & 8){
+    asm ("pushq %rbx" );
+  }
   int64_t got = 0;
   printf("> ");
   int result = scanf("%ld", &got);
   if (result == EOF) {
     fprintf(stderr, "stdin died :(\n");
     exit(1);
+  }
+  if (sp & 8){
+     asm ("popq %rbx");
   }
   return got;
 }
@@ -66,7 +82,7 @@ int64_t giria(arena_t);
 /* of value it is ...                                                  */
 int main() {
   arena_t heap = create_arena(1024);
-  printf("%ld\n", giria(heap));
+  printf("%lx\n", giria(heap));
   arena_free (heap);   
   return 0;
 }
