@@ -210,14 +210,15 @@ let emit_x86 e =
 	  cmd "pushq %rax"            "END make ref, push heap pointer \n")
 	   
     in let deref () =
-	 (cmd "movq (%rsp),%rax"      "BEGIN deref, copy ref pointer to $aux";
+	 (cmd "movq (%rsp),%rax"      "BEGIN deref, copy ref pointer to %aux";
    	  cmd "movq (%rax),%rax"      "copy value to %rax"; 
    	  cmd "movq %rax,(%rsp)"      "END deref, replace top-of-stack with value \n")
 	   
     in let assign () =
 	 (cmd "popq %rax"          "BEGIN assign, pop value into %rax";
-	  cmd "movq %rax,(%rsp)"   "copy value to ref cell in heap";
-      	  cmd "movq $0,(%rsp)"     "END assign, replace heap pointer with unit \n")
+	  cmd "popq %r10"          "pop ref pointer to %r10";
+	  cmd "movq %rax,(%r10)"   "copy value to ref cell in heap";
+    cmd "pushq $0"           "END assign, put unit on stack \n")
 
     in let closure(l, n) =
 	(let m = string_of_int (n + 1) in 
