@@ -64,8 +64,10 @@ let emit_x86 e =
 				  
 	 | READ -> (cmd "popq %rdi"    "BEGIN read, put arg in %rdi";
 		    cmd "movq $0,%rax" "signal no floating point args";
-		    cmd "pushq %r11"   "%r11 is caller-saved "; 
+		    cmd "pushq %r11"   "%r11 is caller-saved ";
+		   (* cmd "push %rbx"    "align stack on 16-byte boundary"; *)
 		    cmd "call read"    "get user input";
+		   (* cmd "pop %rbx"     "restore stack to proper state"; *)
 		    cmd "popq %r11"    "restore %r11"; 		    
 		    cmd "pushq %rax"   "END read, a C-call, so result in %rax \n");
 
@@ -89,7 +91,7 @@ let emit_x86 e =
 	 | LT -> (let l1 = new_label () in  (* label for not < *) 
 		  let l2 = new_label () in  (* label for exit *) 
 		  (cmd "popq %rax"         "BEGIN equal, pop into %rax";
-                   cmd "popq %r10"         "pop into %r10";
+       cmd "popq %r10"         "pop into %r10";
 		   cmd "cmp %rax,%r10"     "compare values";
 		   cmd ("jge " ^ l1)       "jump if not(%r10 < %rax) = %rax >= %r10";
 		   cmd "pushq $1"          "push true";
@@ -123,8 +125,10 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make pair, alloc arg 1 in %rdi"; 
 	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+	  cmd "push %rbx"    "align stack on 16-byte boundary";
 	  cmd "call alloc"            "C-call, so result in %rax";
+	  cmd "pop %rbx"     "restore stack to proper state";
 	  cmd "popq %r11"             "restore %r11"; 		    	  
 	  cmd "popq %r10"             "pop element 2 into %r10";	  
 	  cmd "movq %r10,8(%rax)"     "copy element 2 to heap";
@@ -144,8 +148,10 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make inl, alloc arg 1 in %rdi"; 
 	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+	  cmd "push %rbx"    "align stack on 16-byte boundary";
 	  cmd "call alloc"            "... result in %rax";
+	  cmd "pop %rbx"     "restore stack to proper state";
 	  cmd "popq %r11"             "restore %r11"; 		    	  	  
 	  cmd "movq $0,(%rax)"        "copy inl tag to the heap";
 	  cmd "popq %r10"             "pop argument into %r10";	  
@@ -156,8 +162,10 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make inr, alloc is a C call, arg 1 in %rdi";
 	  cmd "movq $2,%rsi"          "arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+	  cmd "push %rbx"    "align stack on 16-byte boundary";
 	  cmd "call alloc"            "... result in %rax";
+	  cmd "pop %rbx"     "restore stack to proper state";
 	  cmd "popq %r11"             "restore %r11"; 		    	  	  
 	  cmd "movq $1,(%rax)"        "copy inr tag to the heap";
 	  cmd "popq %r10"             "pop argument into %r10";	  	  
@@ -202,8 +210,10 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make ref, alloc arg 1 in %rdi";        
 	  cmd "movq $1,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+	  cmd "push %rbx"    "align stack on 16-byte boundary";
 	  cmd "call alloc"            "alloc is a C-call, result in %rax";
+	  cmd "pop %rbx"     "restore stack to proper state";
 	  cmd "popq %r11"             "restore %r11"; 		    	  	  
 	  cmd "popq %r10"             "copy value into scratch register"; 	  
 	  cmd "movq %r10,(%rax)"      "copy value to heap"; 
@@ -224,8 +234,10 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"                   "BEGIN make closure, alloc arg 1 in %rdi"; 
 	  cmd ("movq $" ^ m ^ ",%rsi")           "arg 2 to alloc in %rsi";
 	  cmd "movq $0,%rax"                     "signal no floating point args";
-	  cmd "pushq %r11"                       "%r11 is caller-saved ";	  
+	  cmd "pushq %r11"                       "%r11 is caller-saved ";
+	  cmd "push %rbx"    "align stack on 16-byte boundary";
 	  cmd "call alloc"                       "... result in %rax";
+	  cmd "pop %rbx"     "restore stack to proper state";
 	  cmd "popq %r11"                        "restore %r11"; 		    	  	  
 	  cmd ("leaq " ^ l ^ "(%rip)" ^ ",%r10") "place code address in scratch register";
 	  cmd ("movq %r10,(%rax)")               "place code address in heap closure";
@@ -297,7 +309,7 @@ let emit_x86 e =
 	tab ".type giria, @function";
 
 	output_string out_chan "giria:\n";  (* label for main body of slang program *)
-	
+	cmd "add $-8, %rsp" "Stack is misaligned by 8 otherwise";
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
 	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
@@ -307,6 +319,7 @@ let emit_x86 e =
 	cmd "popq %rax"         "END giria : place return value in %rax"; 
 	cmd "movq %rbp,%rsp"	"END giria : reset stack to previous base pointer";   
 	cmd "popq %rbp"	        "END giria : restore base pointer";
+	cmd "add $8, %rsp"      "Restore stack to proper state";
 	cmd "ret"               "END giria : return to runtime system \n";
 
         emitl defs;             (* the function definitions *)
@@ -315,9 +328,9 @@ let emit_x86 e =
         close_out out_chan;
 	
 	(* compile and link with runtime.  Comment out these lines if you don't have gcc installed. *)
-	do_command "gcc -g -o runtime/c_runtime.o -c runtime/c_runtime.c"; 
-        do_command ("gcc -g -o " ^ base_name ^ ".o -c " ^ base_name ^ ".s");
-        do_command ("gcc -g -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o"); 
+	do_command "gcc -g -mpreferred-stack-boundary=3 -o runtime/c_runtime.o -c runtime/c_runtime.c";
+        do_command ("gcc -g -mpreferred-stack-boundary=3 -o " ^ base_name ^ ".o -c " ^ base_name ^ ".s");
+        do_command ("gcc -g -mpreferred-stack-boundary=3 -o " ^ base_name ^ " runtime/c_runtime.o " ^ base_name ^ ".o");
         do_command ("rm " ^ base_name ^ ".o");
 	()
        )
