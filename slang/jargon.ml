@@ -31,7 +31,7 @@ type heap_type =
   | HT_INL 
   | HT_INR 
   | HT_CLOSURE
-  | HT_TUPLE  (* HEAD_HEADER indicates length *)
+  | HT_TUPLE  (* HEAP_HEADER indicates length *)
 
 type heap_item = 
   | HEAP_INT of int 

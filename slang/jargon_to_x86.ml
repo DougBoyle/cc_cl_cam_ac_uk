@@ -46,6 +46,21 @@ A few comments on the code below:
  (* Align to an even number of this size *)
  (* Header will be 2 times this size, hold an integer flag and an int for the size of the whole header (i.e. malloc arg) *)
  (* TODO: Add GC to runtime based on the headers *)
+
+ (* Distinguishing stack items: int/bool end in 1, unit = NULL, HI is ptr ending in 0 with address within arena,
+    return address and code index won't be to addresses in the arena *)
+ (* Distinguishing heap items: Same as above for int/bool/unit/HI/CI - all fixed size.
+    For headers: INL/INR fixed size, no header needed, CLOSURE/TUPLE will start with length.
+    Actually - can't tell type out of context so have all start with a size cell (can still use 0/1 for inl/inr tags)
+
+    Also need to garbage collect REFs!
+    *)
+
+(* Done so far:
+ inl/inr headers and tags
+
+*)
+
 let complain = Errors.complain 
   
 let emit_x86 e =
@@ -159,33 +174,35 @@ let emit_x86 e =
 		      
     in let mkinl () = 
 	 (cmd "movq %r11,%rdi"        "BEGIN make inl, alloc arg 1 in %rdi"; 
-	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
+	  cmd "movq $3,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
 	  cmd "pushq %r11"            "%r11 is caller-saved "; 
 	  cmd "call alloc"            "... result in %rax";
-	  cmd "popq %r11"             "restore %r11"; 		    	  	  
-	  cmd "movq $0,(%rax)"        "copy inl tag to the heap";
+	  cmd "popq %r11"             "restore %r11";
+	  cmd "movq $3,(%rax)"        "size of heap item";
+	  cmd "movq $0,8(%rax)"        "copy inl tag to the heap";
 	  cmd "popq %r10"             "pop argument into %r10";	  
-	  cmd "movq %r10,8(%rax)"     "copy argument to the heap";
+	  cmd "movq %r10,16(%rax)"     "copy argument to the heap";
 	  cmd "pushq %rax"            "END make inl, push heap pointer \n")
 
    in let mkinr () =
 	 (cmd "movq %r11,%rdi"        "BEGIN make inr, alloc is a C call, arg 1 in %rdi";
-	  cmd "movq $2,%rsi"          "arg 2 in %rsi";
+	  cmd "movq $3,%rsi"          "arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
 	  cmd "pushq %r11"            "%r11 is caller-saved "; 
 	  cmd "call alloc"            "... result in %rax";
-	  cmd "popq %r11"             "restore %r11"; 		    	  	  
-	  cmd "movq $1,(%rax)"        "copy inr tag to the heap";
+	  cmd "popq %r11"             "restore %r11";
+	  cmd "movq $3,(%rax)"        "size of heap item";
+	  cmd "movq $1,8(%rax)"        "copy inr tag to the heap";
 	  cmd "popq %r10"             "pop argument into %r10";	  	  
-	  cmd "movq %r10,8(%rax)"     "copy argument to the heap";
+	  cmd "movq %r10,16(%rax)"     "copy argument to the heap";
 	  cmd "pushq %rax"            "END make inr, push heap pointer \n")
 
    in let case l =
 	(cmd "popq %rax"            "BEGIN case, pop heap pointer into %rax";
-	 cmd "movq 8(%rax),%r10"    "get the value";
+	 cmd "movq 16(%rax),%r10"    "get the value";
 	 cmd "pushq %r10"           "push the value"; 	 	 
-	 cmd "movq (%rax),%r10"     "get tag"; 
+	 cmd "movq 8(%rax),%r10"     "get tag";
 	 cmd "cmpq $0,%r10"         "compare tag to inl tag"; (* 0 or 1 *)
 	 cmd ("jne " ^ l)           "END case, jump if not equal \n")
 
@@ -217,18 +234,19 @@ let emit_x86 e =
 	   
    in let mkref () =
 	 (cmd "movq %r11,%rdi"        "BEGIN make ref, alloc arg 1 in %rdi";        
-	  cmd "movq $1,%rsi"          "alloc arg 2 in %rsi";
+	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
 	  cmd "pushq %r11"            "%r11 is caller-saved "; 
 	  cmd "call alloc"            "alloc is a C-call, result in %rax";
-	  cmd "popq %r11"             "restore %r11"; 		    	  	  
+	  cmd "popq %r11"             "restore %r11";
+	  cmd "movq $3,(%rax)"        "size of heap item";
 	  cmd "popq %r10"             "copy value into scratch register"; 	  
-	  cmd "movq %r10,(%rax)"      "copy value to heap"; 
+	  cmd "movq %r10,8(%rax)"      "copy value to heap";
 	  cmd "pushq %rax"            "END make ref, push heap pointer \n")
 	   
     in let deref () =
 	 (cmd "movq (%rsp),%rax"      "BEGIN deref, copy ref pointer to $aux";
-   	  cmd "movq (%rax),%rax"      "copy value to %rax"; 
+   	  cmd "movq 8(%rax),%rax"      "copy value to %rax";
    	  cmd "movq %rax,(%rsp)"      "END deref, replace top-of-stack with value \n")
 	   
     in let assign () =
