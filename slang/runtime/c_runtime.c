@@ -16,7 +16,7 @@ struct arena
 
 
 // TODO: Test with size 20, set back to 1024 at end
-int ARENA_SIZE = 1024*2;
+int ARENA_SIZE = 32;
 
 arena_t create_arena(int size)
 {
@@ -26,7 +26,7 @@ arena_t create_arena(int size)
   arena->current = 0;
   
   arena->elements = malloc(size * sizeof(int64_t));
-  
+
   return arena;
 }
 
@@ -66,28 +66,38 @@ list cons(int64_t *oldAddr, int64_t *newAddr, list l){
   return newl;
 }
 
+void printHeap(arena_t heap){
+  int i;
+  for (i = 0; i < heap->current; i++){
+    printf("%ld\n", heap->elements[i]);
+  }
+}
+
 int64_t* bottomOfStack;
 int64_t* heapBottom;
 int64_t* heapTop;
 
 int64_t *alloc(arena_t heap, int64_t n);
 
-// update r11 to use the new heap
+// can't actually update r11 as it gets saved on stack
+// instead make all heap addresses in new heap in terms of old one,
+// so can just memcpy at end
 int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
   int64_t *newAddr = lookup(addr, copied);
   if (newAddr == NULL){
     int64_t size = *addr;
-    newAddr = alloc(copyHeap, size);
+    newAddr = heap->elements + copyHeap->current;
+    int64_t *copyTo = alloc(copyHeap, size); // updates 'current'
     copied = cons(addr, newAddr, copied);
     // copy elements of the heap item
-    *newAddr = size;
+    *copyTo = size;
     int64_t pos;
     for (pos = 1; pos < size; pos++){
       int64_t heapVal = addr[pos];
       if (!(heapVal & 1) && (int64_t*)heapVal >= heapBottom && (int64_t*)heapVal < heapTop){
-        newAddr[pos] = (int64_t)heapCopy(heap, copyHeap, (int64_t*)heapVal);
+        copyTo[pos] = (int64_t)heapCopy(heap, copyHeap, (int64_t*)heapVal);
       } else {
-        newAddr[pos] = heapVal;
+        copyTo[pos] = heapVal;
       }
     }
   } else {
@@ -96,29 +106,32 @@ int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
 }
 
 arena_t copyHeap;
-void garbage_collect(arena_t heap) {
+void garbage_collect(struct arena * const heap, arena_t* metaptr) {
 // for now just try making heap larger
-   heap->size = ARENA_SIZE;
-
+ //  heap->size = ARENA_SIZE;
+  printf("GC called\n");
   copied = (list)NULL;
   copyHeap->current = 0; // reset working space
   heapBottom = heap->elements;
-  heapTop = heapBottom + heap->size * sizeof(int64_t);
+  heapTop = heapBottom + heap->size;
+  //printf("Heap bottom: %p Heap top: %p %p %d\n", heapBottom, heapTop, heapBottom + 19, heap->size);
   int64_t *topOfStack;
   asm ("movq %%rbp, %0;" : "=r" (topOfStack));
-  while (topOfStack > bottomOfStack){
-    int64_t stackVal = *topOfStack;
+  int64_t *stackPtr = bottomOfStack;
+  while (topOfStack < stackPtr){
+    int64_t stackVal = *stackPtr;
     if (!(stackVal & 1) && (int64_t*)stackVal >= heapBottom && (int64_t*)stackVal < heapTop){
       // stack value is actually a heap pointer
-      *topOfStack = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
+      *stackPtr = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
     }
-    topOfStack -= 1;
+    stackPtr -= 1;
   }
-  //memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
-  printf("Copy complete\n");
-  fflush(stdout);
-  //heap->current = copyHeap->current;
 
+  memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
+ /* printf("Copy complete\n");
+  printf("Updated from: %p to %p\n", heap->elements, heap->elements + ARENA_SIZE);
+  fflush(stdout);*/
+  heap->current = copyHeap->current;
 }
 
 int64_t sp;
@@ -132,11 +145,12 @@ int64_t *alloc(arena_t heap, int64_t n)
     asm ("pushq %rbx" );
   }
   if (heap->size < heap->current +n) {
-    printf("gc called\n");
-    fflush(stdout);
-    garbage_collect(heap);
-    printf("heap is: %p\n", heap);
-    fflush(stdout);
+    printf("Heap before %p %p\n", heap, &heap);
+    printHeap(heap);
+    printf("\n");
+    garbage_collect(heap, &heap);
+    printf("Heap %p %p\n", heap, &heap);
+    printHeap(heap);
     if (heap->size < heap->current +n){
       fprintf(stderr, "heap space exhausted\n");
       exit(1);
@@ -146,9 +160,6 @@ int64_t *alloc(arena_t heap, int64_t n)
   int64_t *new_record = heap->elements + heap->current;
 
   heap->current = heap->current + n;
-  printf("after if\n");
-  printf("Allocated to: %p\n", new_record);
-  fflush(stdout);
   if (sp & 8){
     asm ("popq %rbx");
   }
@@ -198,7 +209,6 @@ int main() {
   asm ("movq %%rsp, %0;" : "=r" (bottomOfStack));
 
   arena_t heap = create_arena(ARENA_SIZE);
-  heap->size = ARENA_SIZE/2;
   copyHeap = create_arena(ARENA_SIZE);
   printf("%ld\n", giria(heap) >> 1); /* Shift to decode (div by 2 would round negatives incorrectly) */
   arena_free (heap);
