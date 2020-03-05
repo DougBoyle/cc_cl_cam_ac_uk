@@ -89,10 +89,7 @@ let emit_x86 e =
 	 | READ -> (cmd "popq %rdi"    "BEGIN read, put arg in %rdi";
 		    cmd "movq $0,%rax" "signal no floating point args";
 		    cmd "pushq %r11"   "%r11 is caller-saved ";
-		    cmd "pushq %rbp"         "save the frame pointer";
-        cmd "movq %rsp,%rbp"     "set new frame pointer";
 		    cmd "call read"    "get user input";
-		    cmd "popq %rbp"          "retore base pointer";
         cmd "popq %r11"    "restore %r11";
 		    cmd "pushq %rax"   "END read, a C-call, so result in %rax \n");
 
@@ -167,7 +164,7 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make inl, alloc arg 1 in %rdi"; 
 	  cmd "movq $3,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
 	  cmd "call alloc"            "... result in %rax";
 	  cmd "popq %r11"             "restore %r11";
 	  cmd "movq $3,(%rax)"        "size of heap item";
@@ -180,8 +177,8 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make inr, alloc is a C call, arg 1 in %rdi";
 	  cmd "movq $3,%rsi"          "arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
-	  cmd "call alloc"            "... result in %rax";
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+    	  cmd "call alloc"            "... result in %rax";
 	  cmd "popq %r11"             "restore %r11";
 	  cmd "movq $3,(%rax)"        "size of heap item";
 	  cmd "movq $1,8(%rax)"        "copy inr tag to the heap";
@@ -227,8 +224,8 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"        "BEGIN make ref, alloc arg 1 in %rdi";        
 	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
 	  cmd "movq $0,%rax"          "signal no floating point args";
-	  cmd "pushq %r11"            "%r11 is caller-saved "; 
-	  cmd "call alloc"            "alloc is a C-call, result in %rax";
+	  cmd "pushq %r11"            "%r11 is caller-saved ";
+    	  cmd "call alloc"            "... result in %rax";
 	  cmd "popq %r11"             "restore %r11";
 	  cmd "movq $2,(%rax)"        "size of heap item";
 	  cmd "popq %r10"             "copy value into scratch register"; 	  
@@ -251,8 +248,8 @@ let emit_x86 e =
 	 (cmd "movq %r11,%rdi"                   "BEGIN make closure, alloc arg 1 in %rdi"; 
 	  cmd ("movq $" ^ m ^ ",%rsi")           "arg 2 to alloc in %rsi";
 	  cmd "movq $0,%rax"                     "signal no floating point args";
-	  cmd "pushq %r11"                       "%r11 is caller-saved ";	  
-	  cmd "call alloc"                       "... result in %rax";
+	  cmd "pushq %r11"                       "%r11 is caller-saved ";
+    	  cmd "call alloc"            "... result in %rax";
 	  cmd "popq %r11"                        "restore %r11";
 	  cmd ("movq $" ^ m ^ ",(%rax)")	       "size of heap item";
 	  cmd ("leaq " ^ l ^ "(%rip)" ^ ",%r10") "place code address in scratch register";
@@ -269,7 +266,8 @@ let emit_x86 e =
           cmd ("movq $" ^ m ^ ",%rsi")           "arg 2 to alloc in %rsi";
           cmd "movq $0,%rax"                     "signal no floating point args";
           cmd "pushq %r11"                       "%r11 is caller-saved ";
-          cmd "call alloc"                       "... result in %rax";
+          	  cmd "call alloc"            "... result in %rax";
+          	  cmd "popq %rbp"          "retore base pointer";
           cmd "popq %r11"                        "restore %r11";
           cmd ("movq $" ^ m ^ ",(%rax)")	       "size of heap item";
           for i = 1 to n do

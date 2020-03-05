@@ -1,6 +1,4 @@
-
-
-let f(y : int) : int -> int = 
+let f(y : int) : int -> int =
   let g(x :int) : int = y + x  
   in g end 
 in 

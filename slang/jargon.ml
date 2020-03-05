@@ -364,11 +364,11 @@ let allocate(n, vm) =
     let hp1 = vm.hp in 
     if hp1 + n < vm.heap_bound 
     then (hp1, { vm with hp = vm.hp + n })  
-    else match invoke_garbage_collection vm with 
+    else match invoke_garbage_collection vm with
         | None -> Errors.complain "allocate : heap exhausted"
         | Some vm2 -> 
           if vm2.hp + n < vm2.heap_bound 
-          then (vm2.hp, { vm2 with hp = vm2.hp + n })  
+          then (vm2.hp, { vm2 with hp = vm2.hp + n })
           else Errors.complain "allocate : heap exhausted"
 
 let mk_tuple (n, vm) =
