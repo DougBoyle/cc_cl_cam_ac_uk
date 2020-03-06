@@ -64,22 +64,12 @@ list cons(int64_t *oldAddr, int64_t *newAddr, list l){
   return newl;
 }
 
-void printHeap(arena_t heap){
-  int i;
-  for (i = 0; i < heap->current; i++){
-    printf("%ld\n", heap->elements[i]);
-  }
-}
-
 int64_t* bottomOfStack;
 int64_t* heapBottom;
 int64_t* heapTop;
 
 int64_t *alloc(arena_t heap, int64_t n);
 
-// can't actually update r11 as it gets saved on stack
-// instead make all heap addresses in new heap in terms of old one,
-// so can just memcpy at end
 int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
   int64_t *newAddr = lookup(addr, copied);
   if (newAddr == NULL){
@@ -101,17 +91,13 @@ int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
         copyTo[pos] = heapVal;
       }
     }
-  } else {
-    return newAddr;
   }
+  return newAddr;
 }
 
+// Note - can't check stack copying behaving correctly without also doing the memcpy/heap update
 arena_t copyHeap;
 void garbage_collect(struct arena * const heap) {
-// for now just try making heap larger
- //  heap->size = ARENA_SIZE;
-  printf("GC called\n");
-
   copied = (list)NULL;
   copyHeap->current = 0; // reset working space
   heapBottom = heap->elements;
@@ -124,16 +110,15 @@ void garbage_collect(struct arena * const heap) {
     int64_t stackVal = *stackPtr;
     if (!(stackVal & 1) && (int64_t*)stackVal >= heapBottom && (int64_t*)stackVal < heapTop){
       // stack value is actually a heap pointer
-
-      // TODO: Overwriting something it shouldn't be
-      *stackPtr = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
+      int64_t newVal = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
+      *stackPtr = newVal;
     }
     stackPtr -= 1;
   }
 
-  //memcpy(heap->elements, copyHeap->elements, ARENA_SIZE * sizeof(int64_t));
+  memcpy(heap->elements, copyHeap->elements, copyHeap->current * sizeof(int64_t));
 
- // heap->current = copyHeap->current;
+  heap->current = copyHeap->current;
 }
 
 int64_t sp;
@@ -147,32 +132,24 @@ int64_t *alloc(arena_t heap, int64_t n)
     asm ("pushq %rbx" );
   }
 
-  /*
+
   if (heap->size < heap->current +n) {
-    printf("Heap before %p %p\n", heap, &heap);
-    printHeap(heap);
-    printf("\n");
-    garbage_collect(heap, &heap);
-    printf("Heap %p %p\n", heap, &heap);
-    printHeap(heap);
+    garbage_collect(heap);
     if (heap->size < heap->current +n){
       fprintf(stderr, "heap space exhausted\n");
       exit(1);
     }
-  }*/
-
+  }
+/*
   // to ensure correctness, try running gc on every allocation:
   garbage_collect(heap);
   if (heap->size < heap->current +n){
     fprintf(stderr, "heap space exhausted\n");
     exit(1);
-  }
+  }*/
 
   int64_t *new_record = heap->elements + heap->current;
-
-  printf("Got to end allocating %ld\n", n);
   heap->current = heap->current + n;
-  printHeap(heap);
   if (sp & 8){
     asm ("popq %rbx");
   }

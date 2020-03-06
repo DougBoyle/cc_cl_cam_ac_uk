@@ -4,4 +4,4 @@ f 9 is first to cause 'heap exhausted' error *)
 let f (x : int) : int =
   if x = 1 then 1
   else let a : int * int = (1,2) in f (x-1) + f (x-1) end end
-in f 1 end
+in f 9 end
