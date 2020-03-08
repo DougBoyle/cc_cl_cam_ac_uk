@@ -2,15 +2,15 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-
-/* arena's are taken Lab 7 of from https://www.cl.cam.ac.uk/teaching/1819/ProgC/materials.html */ 
+#include <stdbool.h>
 
 typedef struct arena *arena_t;
 struct arena
 {
   int size;
   int current;
+  int copy;
+  bool flip;
   int64_t* elements;
 };
 
@@ -22,8 +22,10 @@ arena_t create_arena(int size)
   
   arena->size = size;
   arena->current = 0;
+  arena->copy = size; // used while copying only
+  arena->flip = false;
   
-  arena->elements = malloc(size * sizeof(int64_t));
+  arena->elements = malloc(size * 2 * sizeof(int64_t));
 
   return arena;
 }
@@ -34,10 +36,6 @@ void arena_free(arena_t a)
   free(a);
 }
 
-
-// unsure what return value should be.
-// needs to know values on stack + how to traverse
-// Don't jump to stack locations while copying, keep a list of copied heap locations
 struct node {
   int64_t *oldAddr;
   int64_t *newAddr;
@@ -68,41 +66,35 @@ int64_t* bottomOfStack;
 int64_t* heapBottom;
 int64_t* heapTop;
 
-int64_t *alloc(arena_t heap, int64_t n);
-
-int64_t *heapCopy(arena_t heap, arena_t copyHeap, int64_t *addr){
+int64_t *heapCopy(arena_t heap,  int64_t *addr){
   int64_t *newAddr = lookup(addr, copied);
   if (newAddr == NULL){
     int64_t size = *addr;
-    newAddr = heap->elements + copyHeap->current;
-    // updates 'current'
-    int64_t *copyTo = copyHeap->elements + copyHeap->current;
-    copyHeap->current = copyHeap->current + size;
-
+    newAddr = heap->elements + heap->copy;
+    heap->copy += size;
+    int64_t *copyTo = newAddr;
     copied = cons(addr, newAddr, copied);
-    // copy elements of the heap item
-    *copyTo = size;
+    newAddr[0] = size;
     int64_t pos;
     for (pos = 1; pos < size; pos++){
       int64_t heapVal = addr[pos];
       if (!(heapVal & 1) && (int64_t*)heapVal >= heapBottom && (int64_t*)heapVal < heapTop){
-        copyTo[pos] = (int64_t)heapCopy(heap, copyHeap, (int64_t*)heapVal);
+        newAddr[pos] = (int64_t)heapCopy(heap, (int64_t*)heapVal);
       } else {
-        copyTo[pos] = heapVal;
+        newAddr[pos] = heapVal;
       }
     }
   }
   return newAddr;
 }
 
-// Note - can't check stack copying behaving correctly without also doing the memcpy/heap update
-arena_t copyHeap;
-void garbage_collect(struct arena * const heap) {
+void garbage_collect(arena_t heap) {
   copied = (list)NULL;
-  copyHeap->current = 0; // reset working space
   heapBottom = heap->elements;
+  if (heap->flip){
+    heapBottom += heap->size;
+  }
   heapTop = heapBottom + heap->size;
-  //printf("Heap bottom: %p Heap top: %p %p %d\n", heapBottom, heapTop, heapBottom + 19, heap->size);
   int64_t *topOfStack;
   asm ("movq %%rbp, %0;" : "=r" (topOfStack));
   int64_t *stackPtr = bottomOfStack;
@@ -110,50 +102,42 @@ void garbage_collect(struct arena * const heap) {
     int64_t stackVal = *stackPtr;
     if (!(stackVal & 1) && (int64_t*)stackVal >= heapBottom && (int64_t*)stackVal < heapTop){
       // stack value is actually a heap pointer
-      int64_t newVal = (int64_t)heapCopy(heap, copyHeap, (int64_t*)stackVal);
+      int64_t newVal = (int64_t)heapCopy(heap, (int64_t*)stackVal);
       *stackPtr = newVal;
     }
     stackPtr -= 1;
   }
-
-  memcpy(heap->elements, copyHeap->elements, copyHeap->current * sizeof(int64_t));
-
-  heap->current = copyHeap->current;
+  heap->current = heap->copy;
+ heap->flip = !heap->flip;
+ if (heap->flip){
+  heap->copy = 0;
+ } else {
+  heap->copy = heap->size;
+ }
 }
 
 int64_t sp;
-
-// needs to call garbage collector
-// use memcpy for now to do swap after copy, later allow heap to swap betweeen two arenas
-int64_t *alloc(arena_t heap, int64_t n)
-{
+int64_t *alloc(arena_t heap, int64_t n) {
   asm ("movq %%rsp, %0" : "=r" (sp) );
   if (sp & 8){
     asm ("pushq %rbx" );
   }
 
-
-  if (heap->size < heap->current +n) {
+  int limit = heap->flip ? heap->size * 2 : heap->size;
+  if (limit < heap->current + n){
     garbage_collect(heap);
-    if (heap->size < heap->current +n){
+    limit = heap->flip ? heap->size * 2 : heap->size;
+    if (limit < heap->current + n){
       fprintf(stderr, "heap space exhausted\n");
       exit(1);
     }
   }
-/*
-  // to ensure correctness, try running gc on every allocation:
-  garbage_collect(heap);
-  if (heap->size < heap->current +n){
-    fprintf(stderr, "heap space exhausted\n");
-    exit(1);
-  }*/
 
   int64_t *new_record = heap->elements + heap->current;
   heap->current = heap->current + n;
   if (sp & 8){
     asm ("popq %rbx");
   }
-
   return new_record; 
 }
 
@@ -186,20 +170,12 @@ int64_t giria(arena_t);
 /* This needs to be fixed! Must put headers on heap-allocated          */
 /* records, not just for garbage collection, but to identify what kind */
 /* of value it is ...                                                  */
-// could now distinguish heap item from int, but can't tell what type of heap item
-// could maybe use size_t
 int main() {
-  /* what is initial stack pointer?
-  int64_t a;
-  asm ("movq %%rsp, %0;" : "=r" ( a ));
-  printf("%ld\n", a); 7FFFCD0D91D0
-  */
   // TODO: Check pointer gets copied correctly
   // simple way to get range for root set
   asm ("movq %%rsp, %0;" : "=r" (bottomOfStack));
 
   arena_t heap = create_arena(ARENA_SIZE);
-  copyHeap = create_arena(ARENA_SIZE);
   printf("%ld\n", giria(heap) >> 1); /* Shift to decode (div by 2 would round negatives incorrectly) */
   arena_free (heap);
   return 0;
