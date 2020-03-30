@@ -571,8 +571,42 @@ let run l =
     | Halted   -> vm 
     | status -> Errors.complain ("run : stopped wth status " ^ (string_of_status status))
 
+(*
+ how to handle: If true then (let f x = x in ...) else (let f x = 2*x in ...)
+ but also handle: let f x = x in f 1; let f x = 2*x in f 1 end end
 
+ Just need 1 slot per name, maintain a 'locals' record of which names are which locals in current activation,
+ generate mapping in findLets. Only actually update locals when function use expression entered
+*)
 
+let rec mem x = function [] -> false
+  | (y::ys) -> x = y || mem x ys
+
+let setAdd x s = if mem x s then s else x::s
+
+let rec findLets found = function
+  | Seq exprL -> List.fold_left findLets found exprL
+  | LetFun (f, _, e) ->  setAdd f (findLets found e)
+  | LetRecFun (f, _, e) -> setAdd f (findLets found e)
+  | UnaryOp (op, e) -> findLets found e
+  | Op (e, op, e2) -> findLets (findLets found e) e2
+  | If (e1, e2, e3) -> findLets (findLets (findLets found e1) e2) e3
+  | Pair (e, e2) -> findLets (findLets found e) e2
+  | Fst e -> findLets found e
+  | Snd e -> findLets found e
+  | Inl e -> findLets found e
+  | Inr e -> findLets found e
+  | Case (e, _, _) -> findLets found e
+  | While (e, e2) -> findLets (findLets found e) e2
+  | Ref e -> findLets found e
+  | Deref e -> findLets found e
+  | Assign (e, e2) -> findLets (findLets found e) e2
+  | App (e, e2) -> findLets (findLets found e) e2
+  | _ -> []
+
+let rec setLocations i = function
+  | [] -> []
+  | (x::xs) -> (x, STACK_LOCATION i) :: (setLocations (i+1) xs)
 
 (* COMPILE *) 
 
@@ -616,28 +650,35 @@ let positions l =
     | a :: rest -> (a, k) :: (aux (k+1) rest) 
     in aux 1 l 
 
+(*
+   local binding needs to be added to vmap for use of function block, which itself has been searched.
 
-let rec comp vmap = function 
+   1 + (let f x = x*x in 2 end)
+
+   Should we also search within this?
+ *)
+
+let rec comp vmap locals = function
   | Unit           -> ([], [PUSH STACK_UNIT]) 
   | Boolean b      -> ([], [PUSH (STACK_BOOL b)])
   | Integer n      -> ([], [PUSH (STACK_INT n)]) 
-  | UnaryOp(op, e) -> let (defs, c) = comp vmap e in  (defs, c @ [UNARY op])
-  | Op(e1, op, e2) -> let (defs1, c1) = comp vmap e1 in  
-                      let (defs2, c2) = comp vmap e2 in  
+  | UnaryOp(op, e) -> let (defs, c) = comp vmap locals e in  (defs, c @ [UNARY op])
+  | Op(e1, op, e2) -> let (defs1, c1) = comp vmap locals e1 in
+                      let (defs2, c2) = comp vmap locals e2 in
                           (defs1 @ defs2, c1 @ c2 @ [OPER op])
-  | Pair(e1, e2)   -> let (defs1, c1) = comp vmap e1 in  
-                      let (defs2, c2) = comp vmap e2 in  
+  | Pair(e1, e2)   -> let (defs1, c1) = comp vmap locals e1 in
+                      let (defs2, c2) = comp vmap locals e2 in
                           (defs1 @ defs2, c1 @ c2 @ [MK_PAIR]) 
-  | Fst e          -> let (defs, c) = comp vmap e in (defs, c @ [FST])
-  | Snd e          -> let (defs, c) = comp vmap e in (defs, c @ [SND])
-  | Inl e          -> let (defs, c) = comp vmap e in (defs, c @ [MK_INL])
-  | Inr e          -> let (defs, c) = comp vmap e in (defs, c @ [MK_INR])
+  | Fst e          -> let (defs, c) = comp vmap locals e in (defs, c @ [FST])
+  | Snd e          -> let (defs, c) = comp vmap locals e in (defs, c @ [SND])
+  | Inl e          -> let (defs, c) = comp vmap locals e in (defs, c @ [MK_INL])
+  | Inr e          -> let (defs, c) = comp vmap locals e in (defs, c @ [MK_INR])
   | Case(e1, (x1, e2), (x2, e3)) -> 
                       let inr_label = new_label () in 
                       let after_inr_label = new_label () in 
-                      let (defs1, c1) = comp vmap e1 in  
-                      let (defs2, c2) = comp vmap (Lambda(x1, e2)) in  
-                      let (defs3, c3) = comp vmap (Lambda(x2, e3)) in  
+                      let (defs1, c1) = comp vmap locals e1 in
+                      let (defs2, c2) = comp vmap locals (Lambda(x1, e2)) in
+                      let (defs3, c3) = comp vmap locals (Lambda(x2, e3)) in
                          (defs1 @ defs2 @ defs3, 
                           (c1 
    		           @ [CASE(inr_label, None)] 
@@ -648,9 +689,9 @@ let rec comp vmap = function
 		           @ [APPLY; LABEL after_inr_label]))
   | If(e1, e2, e3) -> let else_label = new_label () in 
                       let after_else_label = new_label () in 
-                      let (defs1, c1) = comp vmap e1 in  
-                      let (defs2, c2) = comp vmap e2 in  
-                      let (defs3, c3) = comp vmap e3 in  
+                      let (defs1, c1) = comp vmap locals e1 in
+                      let (defs2, c2) = comp vmap locals e2 in
+                      let (defs3, c3) = comp vmap locals e3 in
                          (defs1 @ defs2 @ defs3, 
                           (c1 
    		           @ [TEST(else_label, None)] 
@@ -659,38 +700,39 @@ let rec comp vmap = function
                            @ c3 
 		           @ [LABEL after_else_label]))   
  | Seq []         -> ([], [])  
- | Seq [e]        -> comp vmap e
- | Seq (e ::rest) -> let (defs1, c1) = comp vmap e in  
-                     let (defs2, c2) = comp vmap (Seq rest) in  
+ | Seq [e]        -> comp vmap locals e
+ | Seq (e ::rest) -> let (defs1, c1) = comp vmap locals e in
+                     let (defs2, c2) = comp vmap locals (Seq rest) in
                        (defs1 @ defs2, c1 @ [POP] @ c2)
- | Ref e          -> let (defs, c) = comp vmap e in (defs, c @ [MK_REF])
- | Deref e        -> let (defs, c) = comp vmap e in (defs, c @ [DEREF])
+ | Ref e          -> let (defs, c) = comp vmap locals e in (defs, c @ [MK_REF])
+ | Deref e        -> let (defs, c) = comp vmap locals e in (defs, c @ [DEREF])
  | While(e1, e2)  -> let test_label = new_label () in 
                       let end_label = new_label () in 
-                      let (defs1, c1) = comp vmap e1 in  
-                      let (defs2, c2) = comp vmap e2 in  
+                      let (defs1, c1) = comp vmap locals e1 in
+                      let (defs2, c2) = comp vmap locals e2 in
                          (defs1 @ defs2, 
                           [LABEL test_label]
                            @ c1 
                            @ [TEST(end_label, None)] 
                            @ c2 
                            @ [POP; GOTO (test_label, None); LABEL end_label; PUSH STACK_UNIT])
- | Assign(e1, e2) -> let (defs1, c1) = comp vmap e1 in  
-                     let (defs2, c2) = comp vmap e2 in 
+ | Assign(e1, e2) -> let (defs1, c1) = comp vmap locals e1 in
+                     let (defs2, c2) = comp vmap locals e2 in
                          (defs1 @ defs2, c1 @ c2 @ [ASSIGN])
 
- | App(e1, e2)    -> let (defs1, c1) = comp vmap e1 in   
-                     let (defs2, c2) = comp vmap e2 in  
+ | App(e1, e2)    -> let (defs1, c1) = comp vmap locals e1 in
+                     let (defs2, c2) = comp vmap locals e2 in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
  | Var x           -> ([], [LOOKUP(find vmap x)])
- | LetFun(f, (x, e1), e2) -> comp vmap (App(Lambda(f, e2), Lambda(x, e1)))
- | Lambda(x, e)           -> comp_lambda vmap (None, x, e)
+ (* Replace to follow local function convention *)
+ | LetFun(f, (x, e1), e2) -> comp vmap locals (App(Lambda(f, e2), Lambda(x, e1)))
+ | Lambda(x, e)           -> comp_lambda vmap locals (None, x, e)
  | LetRecFun(f, (x, e1), e2) -> 
-                      let (defs1, c1) = comp vmap (Lambda(f, e2)) in  
-                      let (defs2, c2) = comp_lambda vmap (Some f, x, e1) in
+                      let (defs1, c1) = comp vmap locals (Lambda(f, e2)) in
+                      let (defs2, c2) = comp_lambda vmap locals (Some f, x, e1) in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
 
-and comp_lambda vmap (f_opt, x, e) = 
+and comp_lambda vmap locals (f_opt, x, e) =
     let bound_vars = match f_opt with | None -> [x]          | Some f -> [x; f] in 
     let f = new_label () in
     let f_bind =     match f_opt with | None -> []           | Some f -> [(f, STACK_LOCATION (-1))]  in 
@@ -700,12 +742,15 @@ and comp_lambda vmap (f_opt, x, e) =
     let fvar_bind (y, p) = (y, HEAP_LOCATION p) in 
     let env_bind = List.map fvar_bind (positions fvars) in 
     let new_vmap = x_bind :: (f_bind @ env_bind @ vmap) in 
-    let (defs, c) = comp new_vmap e in  
+    let (defs, c) = comp new_vmap locals e in
     let def = [LABEL f] @ c @ [RETURN] in 
      (def @ defs, (List.rev fetch_fvars) @ [MK_CLOSURE((f, None), List.length fvars)])
 
+and let_fun vmap locals (f_opt, x, e, e2) =
+  ()
+
 let compile e = 
-    let (defs, c) = comp [] e in 
+    let (defs, c) = comp [] [] e in
     let result = c          (* body of program *) 
                  @ [HALT]   (* stop the interpreter *) 
                  @ defs in  (* the function definitions *) 

@@ -1,10 +1,6 @@
-
-
 let x : int = 100
 in let y : int = 1 
-   in begin
-        x + y
-      end 
+   in x + y
    end 
 end 
 

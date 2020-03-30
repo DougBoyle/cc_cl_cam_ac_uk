@@ -288,7 +288,7 @@ let emit_x86 e =
 
     in let do_command s = if 0 = Sys.command s then () else complain ("command failed: " ^ s) 
     
-    in let (defs, cl) = comp [] e           (* compile to Jargon code with Jargon.comp  *) 						     
+    in let (defs, cl) = comp [] [] e           (* compile to Jargon code with Jargon.comp  *)
        in (* emit header *)
        (tab ".text";
         tab ".extern alloc" ;

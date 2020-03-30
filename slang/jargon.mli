@@ -91,7 +91,7 @@ val driver : int -> vm_state -> vm_state
 
 type listing = instruction list 
 
-val comp : (Past.var * value_path) list ->
+val comp : (Past.var * value_path) list -> (Past.var * value_path) list ->
            Ast.expr -> instruction list * instruction list
 			    
 val compile : Ast.expr -> listing 
