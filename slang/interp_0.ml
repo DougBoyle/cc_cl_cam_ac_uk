@@ -25,7 +25,8 @@ Timothy G. Griffin (tgg22@cam.ac.uk)
     if the input expressin has passed static analysis, then such "run time" 
     errors should never happen! (Can you prove that?) 
 *) 
-open Ast 
+open Ast
+open Types
 
 let complain = Errors.complain
 

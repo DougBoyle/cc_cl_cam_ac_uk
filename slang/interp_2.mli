@@ -20,8 +20,8 @@ and closure = code * env
 and instruction = 
   | PUSH of value 
   | LOOKUP of var 
-  | UNARY of Ast.unary_oper 
-  | OPER of Ast.oper 
+  | UNARY of Types.unary_oper
+  | OPER of Types.oper
   | ASSIGN 
   | SWAP
   | POP 
@@ -42,7 +42,7 @@ and instruction =
 
 and code = instruction list 
 
-and binding = Ast.var * value
+and binding = Types.var * value
 
 and env = binding list
 

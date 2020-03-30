@@ -1,9 +1,4 @@
-
-type var = string 
-
-type oper = ADD | MUL | DIV | SUB | LT | AND | OR | EQB | EQI
-
-type unary_oper = NEG | NOT | READ 
+open Types
 
 type expr = 
        | Unit  
@@ -27,7 +22,7 @@ type expr =
        | Lambda of lambda 
        | App of expr * expr
        | LetFun of var * lambda * expr
-       | LetRecFun of var * lambda * expr
+       | LetRecFun of var * lambda * expr (* For assigning local offsets *)
 
 and lambda = var * expr 
 
@@ -93,10 +88,10 @@ let rec pp_expr ppf = function
     | Ref e            -> fprintf ppf "ref(%a)" pp_expr e 
     | Deref e          -> fprintf ppf "!(%a)" pp_expr e 
     | Assign (e1, e2)  -> fprintf ppf "(%a := %a)" pp_expr e1 pp_expr e2 
-    | LetFun(f, (x, e1), e2)     -> 
+    | LetFun(f, (x, e1), e2)     ->
          fprintf ppf "@[let %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
-    | LetRecFun(f, (x, e1), e2)  -> 
+    | LetRecFun(f, (x, e1), e2)  ->
          fprintf ppf "@[letrec %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
 and pp_expr_list ppf = function 
@@ -160,9 +155,9 @@ let rec string_of_expr = function
     | Ref e            -> mk_con "Ref" [string_of_expr e] 
     | Deref e          -> mk_con "Deref" [string_of_expr e] 
     | Assign (e1, e2)  -> mk_con "Assign" [string_of_expr e1; string_of_expr e2]
-    | LetFun(f, (x, e1), e2)      -> 
+    | LetFun(f, (x, e1), e2)      ->
           mk_con "LetFun" [f; mk_con "" [x; string_of_expr e1]; string_of_expr e2]
-    | LetRecFun(f, (x, e1), e2)   -> 
+    | LetRecFun(f, (x, e1), e2)   ->
           mk_con "LetRecFun" [f; mk_con "" [x; string_of_expr e1]; string_of_expr e2]
     | Case(e, (x1, e1), (x2, e2)) -> 
           mk_con "Case" [

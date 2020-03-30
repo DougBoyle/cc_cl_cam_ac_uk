@@ -1,17 +1,10 @@
-
-type var = string 
-
-type oper = ADD | MUL | DIV | SUB | LT | AND | OR | EQB | EQI
-
-type unary_oper = NEG | NOT | READ 
-
-type expr = 
+type expr =
        | Unit  
-       | Var of var
+       | Var of Types.var
        | Integer of int
        | Boolean of bool
-       | UnaryOp of unary_oper * expr
-       | Op of expr * oper * expr
+       | UnaryOp of Types.unary_oper * expr
+       | Op of expr * Types.oper * expr
        | If of expr * expr * expr
        | Pair of expr * expr
        | Fst of expr 
@@ -28,16 +21,16 @@ type expr =
 
        | Lambda of lambda 
        | App of expr * expr
-       | LetFun of var * lambda * expr
-       | LetRecFun of var * lambda * expr
+       | LetFun of Types.var * lambda * expr
+       | LetRecFun of Types.var * lambda * expr
 
-and lambda = Past.var * expr 
+and lambda = Types.var * expr
 
 (* printing *) 
-val string_of_unary_oper : unary_oper -> string 
-val string_of_oper : oper -> string 
-val string_of_uop : unary_oper -> string 
-val string_of_bop : oper -> string 
+val string_of_unary_oper : Types.unary_oper -> string
+val string_of_oper : Types.oper -> string
+val string_of_uop : Types.unary_oper -> string
+val string_of_bop : Types.oper -> string
 val print_expr : expr -> unit 
 val eprint_expr : expr -> unit
 val string_of_expr : expr -> string 

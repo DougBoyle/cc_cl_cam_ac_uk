@@ -13,25 +13,25 @@
 *) 
 
 let translate_uop = function 
-  | Past.NEG -> Ast.NEG 
-  | Past.NOT -> Ast.NOT 
+  | Past.NEG -> Types.NEG
+  | Past.NOT -> Types.NOT
 
 let translate_bop = function 
-  | Past.ADD -> Ast.ADD 
-  | Past.MUL -> Ast.MUL
-  | Past.DIV -> Ast.DIV
-  | Past.SUB -> Ast.SUB
-  | Past.LT -> Ast.LT
-  | Past.AND -> Ast.AND
-  | Past.OR -> Ast.OR
-  | Past.EQI -> Ast.EQI
-  | Past.EQB -> Ast.EQB
+  | Past.ADD -> Types.ADD
+  | Past.MUL -> Types.MUL
+  | Past.DIV -> Types.DIV
+  | Past.SUB -> Types.SUB
+  | Past.LT -> Types.LT
+  | Past.AND -> Types.AND
+  | Past.OR -> Types.OR
+  | Past.EQI -> Types.EQI
+  | Past.EQB -> Types.EQB
   | Past.EQ  -> Errors.complain "internal error, translate found a EQ that should have been resolved to EQI or EQB"
 
 
 let rec translate_expr = function 
     | Past.Unit _            -> Ast.Unit
-    | Past.What _            -> Ast.UnaryOp(Ast.READ, Ast.Unit)
+    | Past.What _            -> Ast.UnaryOp(Types.READ, Ast.Unit)
     | Past.Var(_, x)         -> Ast.Var x 
     | Past.Integer(_, n)     -> Ast.Integer n
     | Past.Boolean(_, b)     -> Ast.Boolean b

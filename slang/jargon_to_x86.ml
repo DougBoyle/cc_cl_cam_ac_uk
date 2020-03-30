@@ -1,5 +1,6 @@
-open Ast 
-open Jargon 
+open Ast
+open Jargon
+open Types
 (**************************************
 Compiler Construction 2020
 Computer Laboratory
@@ -38,6 +39,7 @@ A few comments on the code below:
 let complain = Errors.complain 
   
 let emit_x86 e =
+    let e = fst (jTranslate 0 e) in
     (* strip ".slang" off of filename *)
     let base_name = String.sub Option.infile 0 ((String.length Option.infile) - 6)
 			     

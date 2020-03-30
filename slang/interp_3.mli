@@ -18,13 +18,13 @@ type value =
 
 and instruction = 
   | PUSH of value 
-  | LOOKUP of Ast.var 
-  | UNARY of Ast.unary_oper 
-  | OPER of Ast.oper 
+  | LOOKUP of Types.var
+  | UNARY of Types.unary_oper
+  | OPER of Types.oper
   | ASSIGN 
   | SWAP
   | POP 
-  | BIND of Ast.var 
+  | BIND of Types.var
   | FST
   | SND
   | DEREF 
@@ -35,7 +35,7 @@ and instruction =
   | MK_INR
   | MK_REF 
   | MK_CLOSURE of location
-  | MK_REC of Ast.var * location
+  | MK_REC of Types.var * location
   | TEST of location 
   | CASE of location
   | GOTO of location
@@ -44,7 +44,7 @@ and instruction =
 
 and code = instruction list 
 
-and binding = Ast.var * value
+and binding = Types.var * value
 
 and env = binding list
 

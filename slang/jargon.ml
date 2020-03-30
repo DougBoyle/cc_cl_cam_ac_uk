@@ -1,5 +1,7 @@
-
-open Ast 
+open Types
+open JargonAst
+(* open Ast *)
+(* Else names clash with Ast.expr and jExpr *)
 
 type code_index = int 
 type stack_index = int 
@@ -8,7 +10,8 @@ type static_distance = int
 type offset  = int 
 
 type label = string 
-type location = label * (code_index option) 
+type location = label * (code_index option)
+
 
 type status_code = 
   | Halted 
@@ -46,9 +49,11 @@ type value_path =
   | STACK_LOCATION of offset 
   | HEAP_LOCATION of offset 
 
+(* TODO: Modify so that apply has necessary info to leave space for local vars *)
 type instruction = 
   | PUSH of stack_item    (* modified *) 
-  | LOOKUP of value_path  (* modified *) 
+  | LOOKUP of value_path  (* modified *)
+  | SETLOCAL of value_path (* Store in local variable on stack *)
   | UNARY of unary_oper 
   | OPER of oper 
   | ASSIGN 
@@ -91,6 +96,44 @@ type vm_state =
 let get_instruction vm = Array.get vm.code vm.cp
 
 let stack_top vm = Array.get vm.stack (vm.sp - 1) 
+
+(* expr -> jExpr translation *)
+let rec jTranslate i = function
+   | Ast.Unit -> (Unit, i)
+   | Ast.Var v -> (Var v, i)
+   | Ast.Integer n -> (Integer n, i)
+   | Ast.Boolean b -> (Boolean b, i)
+   | Ast.UnaryOp (op, e) -> let (e', i') = jTranslate i e in (UnaryOp(op, e'), i')
+   | Ast.Op (e1, op, e2) ->  let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in (Op (e1', op, e2'), i2)
+   | Ast.If (e1, e2, e3) -> let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in
+     let (e3', i3) = jTranslate i2 e3 in (If (e1', e2', e3'), i3)
+   | Ast.Pair (e1, e2) -> let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in (Pair (e1', e2'), i2)
+   | Ast.Fst e -> let (e', i') = jTranslate i e in (Fst e', i')
+   | Ast.Snd e -> let (e', i') = jTranslate i e in (Snd e', i')
+   | Ast.Inl e -> let (e', i') = jTranslate i e in (Inl e', i')
+   | Ast.Inr e -> let (e', i') = jTranslate i e in (Inr e', i')
+   | Ast.Case (e, (x1, e1), (x2, e2)) -> let (e', i') = jTranslate i e in
+     let (e1', i1) = jTranslate 0 e1 in let (e2', i2) = jTranslate 0 e2 in
+     (Case(e', (x1, e1', i1), (x2, e2', i2)), i')
+   | Ast.While (e1, e2) -> let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in (While (e1', e2'), i2)
+   | Ast.Seq el -> let (el', i') = List.fold_right
+     (fun e ->  fun (el, i) -> let (e', i') = jTranslate i e in (e' :: el, i')) el ([], i)
+     in (Seq el', i')
+   | Ast.Ref e -> let (e', i') = jTranslate i e in (Ref e', i')
+   | Ast.Deref e -> let (e', i') = jTranslate i e in (Deref e', i')
+   | Ast.Assign (e1, e2) -> let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in (Assign (e1', e2'), i2)
+   | Ast.Lambda (x, e) -> let (e', i') = jTranslate 0 e in (Lambda (x, e', i'), i)
+   | Ast.App (e1, e2) -> let (e1', i1) = jTranslate i e1 in
+     let (e2', i2) = jTranslate i1 e2 in (App (e1', e2'), i2)
+   | Ast.LetFun (f, (x, body), e) -> let (body', i1) = jTranslate 0 body in
+     let (e', i2) = jTranslate (i+1) e in (LetFun(f, (x, body', i1), e', i+1), i2)
+   | Ast.LetRecFun (f, (x, body), e) -> let (body', i1) = jTranslate 0 body in
+     let (e', i2) = jTranslate (i+1) e in (LetRecFun(f, (x, body', i1), e', i+1), i2)
 
 (********************** Printing ********************************) 
 
@@ -143,7 +186,7 @@ let string_of_location = function
   | (l, None) -> l 
   | (l, Some i) -> l ^ " = " ^ (string_of_int i) 
 
-let string_of_instruction = function 
+let string_of_instruction = function
  | UNARY op -> "UNARY " ^ (string_of_uop op) 
  | OPER op  -> "OPER " ^ (string_of_bop op) 
  | MK_PAIR  -> "MK_PAIR"
@@ -153,7 +196,8 @@ let string_of_instruction = function
  | MK_INR   -> "MK_INR"
  | MK_REF   -> "MK_REF"
  | PUSH v   -> "PUSH " ^ (string_of_stack_item v) 
- | LOOKUP p -> "LOOKUP " ^ (string_of_value_path p) 
+ | LOOKUP p -> "LOOKUP " ^ (string_of_value_path p)
+ | SETLOCAL p -> "SETLOCAL " ^ (string_of_value_path p)
  | TEST l   -> "TEST " ^ (string_of_location l)
  | CASE l   -> "CASE " ^ (string_of_location l)
  | GOTO l   -> "GOTO " ^ (string_of_location l)
@@ -576,7 +620,14 @@ let run l =
  but also handle: let f x = x in f 1; let f x = 2*x in f 1 end end
 
  Just need 1 slot per name, maintain a 'locals' record of which names are which locals in current activation,
- generate mapping in findLets. Only actually update locals when function use expression entered
+ generate mapping in findLets. Only actually update locals when function use expression entered.
+
+ TODO:
+ STILL NOT SOLVED
+ let f x = ... in e1 ; let f x = ... in e2 end ; e3 end
+ e1 and e3 need to see original f, e2 sees a different one, need unique names.
+ Use name mangling?
+ 'locals' mapping still a set i.e. unique entries though
 *)
 
 let rec mem x = function [] -> false
@@ -586,8 +637,8 @@ let setAdd x s = if mem x s then s else x::s
 
 let rec findLets found = function
   | Seq exprL -> List.fold_left findLets found exprL
-  | LetFun (f, _, e) ->  setAdd f (findLets found e)
-  | LetRecFun (f, _, e) -> setAdd f (findLets found e)
+  | LetFun (f, _, e, i) ->  setAdd f (findLets found e)
+  | LetRecFun (f, _, e, i) -> setAdd f (findLets found e)
   | UnaryOp (op, e) -> findLets found e
   | Op (e, op, e2) -> findLets (findLets found e) e2
   | If (e1, e2, e3) -> findLets (findLets (findLets found e1) e2) e3
@@ -673,12 +724,12 @@ let rec comp vmap locals = function
   | Snd e          -> let (defs, c) = comp vmap locals e in (defs, c @ [SND])
   | Inl e          -> let (defs, c) = comp vmap locals e in (defs, c @ [MK_INL])
   | Inr e          -> let (defs, c) = comp vmap locals e in (defs, c @ [MK_INR])
-  | Case(e1, (x1, e2), (x2, e3)) -> 
+  | Case(e1, (x1, e2, i1), (x2, e3, i2)) ->
                       let inr_label = new_label () in 
                       let after_inr_label = new_label () in 
                       let (defs1, c1) = comp vmap locals e1 in
-                      let (defs2, c2) = comp vmap locals (Lambda(x1, e2)) in
-                      let (defs3, c3) = comp vmap locals (Lambda(x2, e3)) in
+                      let (defs2, c2) = comp vmap locals (Lambda(x1, e2, i1)) in
+                      let (defs3, c3) = comp vmap locals (Lambda(x2, e3, i2)) in
                          (defs1 @ defs2 @ defs3, 
                           (c1 
    		           @ [CASE(inr_label, None)] 
@@ -725,10 +776,11 @@ let rec comp vmap locals = function
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
  | Var x           -> ([], [LOOKUP(find vmap x)])
  (* Replace to follow local function convention *)
- | LetFun(f, (x, e1), e2) -> comp vmap locals (App(Lambda(f, e2), Lambda(x, e1)))
- | Lambda(x, e)           -> comp_lambda vmap locals (None, x, e)
- | LetRecFun(f, (x, e1), e2) -> 
-                      let (defs1, c1) = comp vmap locals (Lambda(f, e2)) in
+ (* Will need to use i *)
+ | LetFun(f, (x, e1, i1), e2, i2) -> comp vmap locals (App(Lambda(f, e2, i2), Lambda(x, e1, i1)))
+ | Lambda(x, e, i)           -> comp_lambda vmap locals (None, x, e) (* Will need to use i *)
+ | LetRecFun(f, (x, e1, i1), e2, i2) ->  (* Will need to use i *)
+                      let (defs1, c1) = comp vmap locals (Lambda(f, e2, i2)) in
                       let (defs2, c2) = comp_lambda vmap locals (Some f, x, e1) in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
 
@@ -737,7 +789,7 @@ and comp_lambda vmap locals (f_opt, x, e) =
     let f = new_label () in
     let f_bind =     match f_opt with | None -> []           | Some f -> [(f, STACK_LOCATION (-1))]  in 
     let x_bind = (x, STACK_LOCATION (-2)) in 
-    let fvars = Free_vars.free_vars (bound_vars, e)   in 
+    let fvars = Free_vars.free_vars_jargon (bound_vars, e)  in
     let fetch_fvars = List.map (fun y -> LOOKUP(find vmap y)) fvars in 
     let fvar_bind (y, p) = (y, HEAP_LOCATION p) in 
     let env_bind = List.map fvar_bind (positions fvars) in 
@@ -746,11 +798,25 @@ and comp_lambda vmap locals (f_opt, x, e) =
     let def = [LABEL f] @ c @ [RETURN] in 
      (def @ defs, (List.rev fetch_fvars) @ [MK_CLOSURE((f, None), List.length fvars)])
 
-and let_fun vmap locals (f_opt, x, e, e2) =
-  ()
+and let_fun vmap locals (f, x, e, e2, recursive) =
+  let stackLoc = find locals f in
+  let bound_vars = if recursive then [x; f] else [x] in
+ (* let bound_vars = match f_opt with | None -> [x]          | Some f -> [x; f] in  *)
+  let f = new_label () in
+  let f_bind = if recursive then [(f, STACK_LOCATION (-1))] else [] in
+  let x_bind = (x, STACK_LOCATION (-2)) in
+  let fvars = Free_vars.free_vars_jargon (bound_vars, e)   in
+  let fetch_fvars = List.map (fun y -> LOOKUP(find vmap y)) fvars in
+  let fvar_bind (y, p) = (y, HEAP_LOCATION p) in
+  let env_bind = List.map fvar_bind (positions fvars) in
+  let new_vmap = x_bind :: (f_bind @ env_bind @ vmap) in
+  let (defs, c) = comp new_vmap locals e in
+  let def = [LABEL f] @ c @ [RETURN] in
+   (def @ defs, (List.rev fetch_fvars) @ [MK_CLOSURE((f, None), List.length fvars)])
 
+(* TODO: comp needs to be called with the top level local mapping setup *)
 let compile e = 
-    let (defs, c) = comp [] [] e in
+    let (defs, c) = comp [] [] (fst (jTranslate 0 e)) in
     let result = c          (* body of program *) 
                  @ [HALT]   (* stop the interpreter *) 
                  @ defs in  (* the function definitions *) 

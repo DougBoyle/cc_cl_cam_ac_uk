@@ -12,12 +12,12 @@ type value =
      | REC_CLOSURE of closure
      | CLOSURE of closure  
 
-and closure = Ast.var * Ast.expr * env 
+and closure = Types.var * Ast.expr * env
 
 and continuation_action = 
-  | UNARY of Ast.unary_oper
-  | OPER of Ast.oper * value
-  | OPER_FST of Ast.expr * env * Ast.oper 
+  | UNARY of Types.unary_oper
+  | OPER of Types.oper * value
+  | OPER_FST of Ast.expr * env * Types.oper
   | ASSIGN of value
   | ASSIGN_FST of Ast.expr * env
   | TAIL of Ast.expr list * env
@@ -31,13 +31,13 @@ and continuation_action =
   | MKINR 
   | MKREF 
   | DEREF 
-  | CASE of Ast.var * Ast.expr * Ast.var * Ast.expr * env 
+  | CASE of Types.var * Ast.expr * Types.var * Ast.expr * env
   | APPLY of value 
   | ARG of Ast.expr * env 
 
 and continuation = continuation_action  list
 
-and binding = Ast.var * value
+and binding = Types.var * value
 
 and env = binding list
 

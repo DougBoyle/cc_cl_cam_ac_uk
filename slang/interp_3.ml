@@ -16,7 +16,8 @@ Timothy G. Griffin (tgg22@cam.ac.uk)
 *) 
 
 
-open Ast 
+open Ast
+open Types
 
 let complain = Errors.complain
 

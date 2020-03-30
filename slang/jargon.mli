@@ -6,7 +6,7 @@ type static_distance = int
 type offset  = int 
 
 type label = string 
-type location = label * (code_index option) 
+type location = label * (code_index option)
 
 type status_code = 
   | Halted 
@@ -44,9 +44,10 @@ type value_path =
 
 type instruction = 
   | PUSH of stack_item    (* modified *) 
-  | LOOKUP of value_path      (* modified *) 
-  | UNARY of Ast.unary_oper 
-  | OPER of Ast.oper 
+  | LOOKUP of value_path  (* modified *)
+  | SETLOCAL of value_path (* Store in local variable on stack *)
+  | UNARY of Types.unary_oper
+  | OPER of Types.oper
   | ASSIGN 
   | SWAP
   | POP 
@@ -91,8 +92,8 @@ val driver : int -> vm_state -> vm_state
 
 type listing = instruction list 
 
-val comp : (Past.var * value_path) list -> (Past.var * value_path) list ->
-           Ast.expr -> instruction list * instruction list
+val comp : (Types.var * value_path) list -> (Types.var * value_path) list ->
+           JargonAst.jExpr -> instruction list * instruction list
 			    
 val compile : Ast.expr -> listing 
 
@@ -102,5 +103,7 @@ val interpret : Ast.expr -> vm_state
 
 val string_of_listing : listing -> string 
 
-val string_of_value : vm_state -> string 
+val string_of_value : vm_state -> string
+
+val jTranslate : int -> Ast.expr -> JargonAst.jExpr * int
 

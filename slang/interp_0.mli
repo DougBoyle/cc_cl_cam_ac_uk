@@ -14,7 +14,7 @@ and value =
      | INR of value 
      | FUN of ((value * store) -> (value * store))
 
-type env = Ast.var -> value 
+type env = Types.var -> value
 
 val string_of_value : value -> string 
 

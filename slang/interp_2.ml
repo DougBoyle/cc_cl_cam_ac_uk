@@ -16,7 +16,8 @@ What do I mean by "high-level"?
 *) 
 
 
-open Ast 
+open Ast
+open Types
 
 let complain = Errors.complain
 

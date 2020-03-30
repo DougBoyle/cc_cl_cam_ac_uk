@@ -13,11 +13,12 @@ Timothy G. Griffin (tgg22@cam.ac.uk)
 *) 
 
 
-open Ast 
+open Ast
+open Types
 
 let complain = Errors.complain
 
-type address = int 
+type address = int
 
 type value = 
      | REF of address 
@@ -35,7 +36,7 @@ and closure = var * expr * env
 and continuation_action = 
   | UNARY of unary_oper 
   | OPER of oper * value 
-  | OPER_FST of Ast.expr * env * Ast.oper 
+  | OPER_FST of Ast.expr * env * Types.oper
   | ASSIGN of value
   | ASSIGN_FST of Ast.expr * env
   | TAIL of Ast.expr list * env
