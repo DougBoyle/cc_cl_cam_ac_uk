@@ -35,7 +35,7 @@ let i4x86 (file, e) = let _ = Jargon_to_x86.emit_x86 e in None
 (* show compiled code *)
 let i2cc (file, e)   = let _ = print_string (Interp_2.string_of_code (Interp_2.compile e)) in None
 let i3cc (file, e)   = let _ = print_string (Interp_3.string_of_code (Interp_3.compile e)) in None
-let i4cc (file, e)   = let _ = print_string (Jargon.string_of_listing (Jargon.compile e)) in None
+let i4cc (file, e)   = let _ = print_string (Jargon.string_of_listing (fst (Jargon.compile e))) in None
 
 let interpreters = [
     (* use-flag,  the action, a description string *)

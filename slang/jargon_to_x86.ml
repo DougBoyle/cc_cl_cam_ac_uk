@@ -39,7 +39,7 @@ A few comments on the code below:
 let complain = Errors.complain 
   
 let emit_x86 e =
-    let e = fst (jTranslate 0 e) in
+    let (e, n) = jTranslate 0 e in (* n is number of top level free variables *)
     (* strip ".slang" off of filename *)
     let base_name = String.sub Option.infile 0 ((String.length Option.infile) - 6)
 			     
@@ -180,9 +180,12 @@ let emit_x86 e =
 	(let j = string_of_int (8 * i) in  	   	    
          (cmd ("movq " ^ j ^ "(%rbp)" ^ ",%r10") "BEGIN stack lookup, index off of base pointer";
 	  cmd "pushq %r10"                       "END stack lookup, push value \n"))
-	                        
+
+	in let stack_update i = (let j = string_of_int (8 * i) in
+	    cmd ("popq " ^ j ^ "(%rbp)") "Set local variable")
+
    in let heap_lookup i =
-	(let j = string_of_int (8 * i) in  	   
+	(let j = string_of_int (8 * (i + 1)) in (* +1 to account for storing num locals in closure *)
 	 (cmd "movq 8(%rbp), %rax"               "BEGIN heap lookup, copy closure pointer to %rax";
  	  cmd ("movq " ^ j ^ "(%rax)" ^ ",%r10") ("put closue value at index " ^ (string_of_int i) ^ " in scratch register");
 	  cmd "pushq %r10"                       "END heap lookup, push value \n"))
@@ -221,8 +224,9 @@ let emit_x86 e =
 	  cmd "movq %rax,(%rsp)"   "copy value to ref cell in heap";
       	  cmd "movq $0,(%rsp)"     "END assign, replace heap pointer with unit \n")
 
-    in let closure(l, n) =
-	(let m = string_of_int (n + 1) in 
+    in let closure(l, n, locals) =
+	(let m = string_of_int (n + 2) in
+	 let locals2 = string_of_int (8 * locals) in
 	 (cmd "movq %r11,%rdi"                   "BEGIN make closure, alloc arg 1 in %rdi"; 
 	  cmd ("movq $" ^ m ^ ",%rsi")           "arg 2 to alloc in %rsi";
 	  cmd "movq $0,%rax"                     "signal no floating point args";
@@ -231,7 +235,8 @@ let emit_x86 e =
 	  cmd "popq %r11"                        "restore %r11"; 		    	  	  
 	  cmd ("leaq " ^ l ^ "(%rip)" ^ ",%r10") "place code address in scratch register";
 	  cmd ("movq %r10,(%rax)")               "place code address in heap closure";
-   	  for i = 1 to n do
+	  cmd ("movq $" ^ locals2 ^ ", 8(%rax)") "Remember amount of space to save for locals";
+   	  for i = 2 to n+1 do
 	    let j = string_of_int (8 * i) in  
 	    (cmd ("popq %r10")                   "pop value into the scratch register";
 	     cmd ("movq %r10," ^ j ^ "(%rax)")   "copy value to the heap")
@@ -241,18 +246,22 @@ let emit_x86 e =
 	      
     in let apply () =
 	    (cmd "movq (%rsp),%rax"   "BEGIN apply, copy closure pointer to %rax";
-             cmd "movq (%rax),%rax"   "get the the function address from heap";	  
+	     cmd "movq 8(%rax),%r10"  "Get offset size for locals";
+       cmd "movq (%rax),%rax"   "get the the function address from heap";
 	     cmd "pushq %rbp"         "save the frame pointer";
-	     cmd "movq %rsp,%rbp"     "set new frame pointer";	     	     
-      	     cmd "call *%rax"         "call pushes return address, jumps to function";
-	     cmd "popq %rbp"          "retore base pointer";	     
+	     cmd "movq %rsp,%rbp"     "set new frame pointer";
+	     cmd "subq %r10, %rsp"    "Leave space for local variables";
+       cmd "call *%rax"         "call pushes return address, jumps to function";
+       cmd "movq 8(%rbp), %r10" "get closure pointer";
+       cmd "addq 8(%r10), %rsp" "pop local variables";
+	     cmd "popq %rbp"          "retore base pointer";
 	     cmd "addq $8, %rsp"      "pop closure";
 	     cmd "addq $8, %rsp"      "pop argument";
 	     cmd "pushq %rax"         "END apply, push returned value on stack \n")
 	      
     in let ret () = 
 	    (cmd "popq %rax"         "BEGIN return. put top-of-stack in %rax";
-      	     cmd "ret"               "END retrun, this pops return address, jumps there \n")
+       cmd "ret"               "END retrun, this pops return address, jumps there \n")
 	    
     (* emit command *) 	    
     in let emitc = function
@@ -273,9 +282,11 @@ let emit_x86 e =
 	  | TEST (l, _) -> test l 			     			     
 	  | GOTO (l, _) -> goto l 			     
 	  | CASE (l, _) -> case l
-	  | MK_CLOSURE ((l, _), n)         -> closure(l, n) 				  
+	  | MK_CLOSURE ((l, _), n, m)         -> closure(l, n, m)
 	  | LOOKUP (STACK_LOCATION offset) -> stack_lookup (0 - offset) (* stack grows downward, so negate offsets *) 
-	  | LOOKUP (HEAP_LOCATION offset)  -> heap_lookup offset			      
+	  | LOOKUP (HEAP_LOCATION offset)  -> heap_lookup offset
+	  | SETLOCAL (STACK_LOCATION offset) -> stack_update (-offset) (* stack grows downward *)
+	  | SETLOCAL (HEAP_LOCATION offest) -> complain "Internal Error: Never have heap pointer to local variable"
 	  | POP                     -> cmd "addq $8, %rsp" "pop stack \n"
 	  | PUSH (STACK_INT i)      -> cmd ("pushq $" ^ (string_of_int i)) "push int \n"
 	  | PUSH (STACK_BOOL true)  -> cmd "pushq $1" "push true \n"
@@ -289,8 +300,10 @@ let emit_x86 e =
     in let rec emitl = function [] -> () | c::l -> (emitc c; emitl l)
 
     in let do_command s = if 0 = Sys.command s then () else complain ("command failed: " ^ s) 
-    
-    in let (defs, cl) = comp [] [] e           (* compile to Jargon code with Jargon.comp  *)
+
+    in let n2 = string_of_int (8 * n)
+
+    in let (defs, cl) = comp [] e           (* compile to Jargon code with Jargon.comp  *)
        in (* emit header *)
        (tab ".text";
         tab ".extern alloc" ;
@@ -303,10 +316,12 @@ let emit_x86 e =
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
 	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
-	
+	cmd ("subq $" ^ n2 ^ ", %rsp") "Make space for top level locals";
+
 	emitl cl;               (* main body of program *)
 	
-	cmd "popq %rax"         "END giria : place return value in %rax"; 
+	cmd "popq %rax"         "END giria : place return value in %rax";
+	cmd ("addq $" ^ n2 ^ ", %rsp") "pop top level locals";
 	cmd "movq %rbp,%rsp"	"END giria : reset stack to previous base pointer";   
 	cmd "popq %rbp"	        "END giria : restore base pointer";
 	cmd "ret"               "END giria : return to runtime system \n";

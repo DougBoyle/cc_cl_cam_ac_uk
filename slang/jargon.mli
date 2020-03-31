@@ -61,7 +61,7 @@ type instruction =
   | MK_INL
   | MK_INR
   | MK_REF 
-  | MK_CLOSURE of location * int (* modified *) 
+  | MK_CLOSURE of location * int * int (* modified *)
   | TEST of location 
   | CASE of location
   | GOTO of location
@@ -92,12 +92,12 @@ val driver : int -> vm_state -> vm_state
 
 type listing = instruction list 
 
-val comp : (Types.var * value_path) list -> (Types.var * value_path) list ->
+val comp : (Types.var * value_path) list ->
            JargonAst.jExpr -> instruction list * instruction list
 			    
-val compile : Ast.expr -> listing 
+val compile : Ast.expr -> listing * int
 
-val run : listing -> vm_state
+val run : listing * int -> vm_state
 
 val interpret : Ast.expr -> vm_state
 
