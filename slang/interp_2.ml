@@ -314,7 +314,9 @@ let rec compile = function
                      @ [APPLY; 
                         SWAP; POP]  (* get rid of env left on stack *) 
  | Lambda(x, e)   -> [MK_CLOSURE((BIND x) :: (compile e) @ leave_scope)]
- | LetFun(f, (x, body), e)    -> 
+ | Let((x, e1), e2) ->
+   (compile e1) @ [MK_CLOSURE((BIND x) :: (compile e2) @ leave_scope); APPLY; SWAP; POP]
+ | LetFun(f, (x, body), e)    ->
        (MK_CLOSURE((BIND x) :: (compile body) @ leave_scope)) :: 
        (BIND f) :: 
        (compile e) @ leave_scope

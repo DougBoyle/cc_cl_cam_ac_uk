@@ -23,6 +23,7 @@ let free_vars(bvars, exp) =
     | Ast.Inr e              -> aux bound free e
     | Ast.Lambda l           -> lambda bound free l
     | Ast.Case(e, l1, l2)    -> lambda bound (lambda bound (aux bound free e) l1) l2
+    | Ast.Let (l, e)        -> aux bound (lambda bound free l) e
     | Ast.LetFun(f, l, e)    -> aux (f :: bound) (lambda bound free l) e
     | Ast.LetRecFun(f, l, e) -> aux (f :: bound) (lambda (f :: bound) free l) e
     | Ast.Ref e              -> aux bound free e

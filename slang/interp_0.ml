@@ -165,6 +165,8 @@ let rec interpret (e, env, store) =
                            | FUN f -> f (v2, store2)
                            | v -> complain "runtime error.  Expecting a function!"
                           )
+    | Let ((x, e), e2) -> let (v, s) = interpret(e, env, store) in
+      interpret(e2, update(env, (x, v)), s)
     | LetFun(f, (x, body), e) -> 
        let new_env = update(env, (f, FUN (fun (v, s) -> interpret(body, update(env, (x, v)), s))))
        in interpret(e, new_env, store) 

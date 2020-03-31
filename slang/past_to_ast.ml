@@ -52,7 +52,8 @@ let rec translate_expr = function
         "let x = e1 in e2 end" to "(fun x -> e2) e1" 
     *) 
     | Past.Let(_, x, _, e1, e2) -> 
-         Ast.App(Ast.Lambda(x, translate_expr e2), translate_expr e1)
+      (*   Ast.App(Ast.Lambda(x, translate_expr e2), translate_expr e1) *)
+      Ast.Let((x, translate_expr e1), translate_expr e2)
     | Past.LetFun(_, f, l, _, e)     -> 
          Ast.LetFun(f, translate_lambda l, translate_expr e)
     | Past.LetRecFun(_, f, l, _, e)     -> 

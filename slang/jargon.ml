@@ -130,6 +130,8 @@ let rec jTranslate i = function
    | Ast.Lambda (x, e) -> let (e', i') = jTranslate 0 e in (Lambda (x, e', i'), i)
    | Ast.App (e1, e2) -> let (e1', i1) = jTranslate i e1 in
      let (e2', i2) = jTranslate i1 e2 in (App (e1', e2'), i2)
+   | Ast.Let ((x, e1), e2) -> let (e1', i1) = jTranslate (i+1) e1 in
+     let (e2', i2) = jTranslate i1 e2 in (Let((x, e1', i+1), e2'), i2)
    | Ast.LetFun (f, (x, body), e) -> let (body', i1) = jTranslate 0 body in
      let (e', i2) = jTranslate (i+1) e in (LetFun(f, (x, body', i1), e', i+1), i2)
    | Ast.LetRecFun (f, (x, body), e) -> let (body', i1) = jTranslate 0 body in
@@ -740,6 +742,9 @@ let rec comp vmap = function
  | Var x           -> ([], [LOOKUP(find vmap x)])
  (* Replace to follow local function convention *)
  (* Will need to use i *)
+ | Let((x, e, i), e2) -> let (defs1, c1) = comp vmap e in
+   let (defs2, c2) = comp ((x, STACK_LOCATION i)::vmap) e2 in
+   (defs1 @ defs2, c1 @ [SETLOCAL (STACK_LOCATION i)] @ c2)
  | LetFun(f, l, e, i) -> let_fun vmap (f, l, e, i, false)
  | Lambda(x, e, i)    -> comp_lambda vmap (x, e, i) (* Will need to use i *)
  | LetRecFun(f, l, e, i) -> let_fun vmap (f, l, e, i, true)

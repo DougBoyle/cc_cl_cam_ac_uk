@@ -21,6 +21,7 @@ type expr =
 
        | Lambda of lambda 
        | App of expr * expr
+       | Let of lambda * expr
        | LetFun of Types.var * lambda * expr
        | LetRecFun of Types.var * lambda * expr
 

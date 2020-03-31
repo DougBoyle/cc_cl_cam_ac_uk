@@ -358,7 +358,7 @@ let rec comp = function
 
   which is simpler. 
 
-*) 
+*)
  | LetFun(f, (x, e1), e2) -> 
                       let (defs1, c1) = comp e1 in  
                       let (defs2, c2) = comp e2 in
@@ -373,6 +373,13 @@ let rec comp = function
                       let def = [LABEL lab; BIND x] @ c1 @ [SWAP; POP; RETURN] in
                           (def @ defs1 @ defs2, 
                            [MK_REC(f, (lab, None)); BIND f] @ c2 @ [SWAP; POP])
+ | Let((x, e1), e2) ->
+                      let (defs, c) = comp e2 in
+                      let f = new_label () in
+                      let def = [LABEL f ; BIND x] @ c @ [SWAP; POP; RETURN] in
+                      let (defs2, c2) = comp e1 in
+                      (def @ defs @ defs2, c2 @ [MK_CLOSURE((f, None)); APPLY])
+
 let compile e = 
     let (defs, c) = comp e in 
     let result = c @               (* body of program *) 

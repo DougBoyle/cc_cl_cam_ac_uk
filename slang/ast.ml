@@ -21,6 +21,7 @@ type expr =
        | Assign of expr * expr 
        | Lambda of lambda 
        | App of expr * expr
+       | Let of lambda * expr
        | LetFun of var * lambda * expr
        | LetRecFun of var * lambda * expr (* For assigning local offsets *)
 
@@ -87,7 +88,8 @@ let rec pp_expr ppf = function
     | While (e1, e2)   -> fprintf ppf "while %a do %a end" pp_expr e1 pp_expr e2 
     | Ref e            -> fprintf ppf "ref(%a)" pp_expr e 
     | Deref e          -> fprintf ppf "!(%a)" pp_expr e 
-    | Assign (e1, e2)  -> fprintf ppf "(%a := %a)" pp_expr e1 pp_expr e2 
+    | Assign (e1, e2)  -> fprintf ppf "(%a := %a)" pp_expr e1 pp_expr e2
+    | Let ((x, e1), e2) -> fprintf ppf "@[let %a =@ %a @ in %a @ end@" fstring x pp_expr e1 pp_expr e2
     | LetFun(f, (x, e1), e2)     ->
          fprintf ppf "@[let %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
@@ -155,6 +157,7 @@ let rec string_of_expr = function
     | Ref e            -> mk_con "Ref" [string_of_expr e] 
     | Deref e          -> mk_con "Deref" [string_of_expr e] 
     | Assign (e1, e2)  -> mk_con "Assign" [string_of_expr e1; string_of_expr e2]
+    | Let ((x, e1), e2) -> mk_con "Let" [mk_con "" [x; string_of_expr e1]; string_of_expr e2]
     | LetFun(f, (x, e1), e2)      ->
           mk_con "LetFun" [f; mk_con "" [x; string_of_expr e1]; string_of_expr e2]
     | LetRecFun(f, (x, e1), e2)   ->

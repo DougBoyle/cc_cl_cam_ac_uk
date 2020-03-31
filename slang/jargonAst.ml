@@ -19,6 +19,7 @@ type jExpr =
        | Assign of jExpr * jExpr
        | Lambda of lambda
        | App of jExpr * jExpr
+       | Let of lambda * jExpr
        | LetFun of Types.var * lambda * jExpr * int (* For assigning local offsets *)
        | LetRecFun of Types.var * lambda * jExpr *  int
 
