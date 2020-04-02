@@ -255,7 +255,9 @@ let emit_x86 e =
 	      
     in let ret () = 
 	    (cmd "popq %rax"         "BEGIN return. put top-of-stack in %rax";
-	     cmd "pushq -8(%rbp)"    "Copy return address above local variables ready for ret";
+	  (*   cmd "pushq -8(%rbp)"    "Copy return address above local variables ready for ret"; *)
+	     cmd "movq %rbp,%rsp"    "Move SP back to frame pointer location";
+	     cmd "subq $8,%rsp"      "SP now pointer to return value";
        cmd "ret"               "END retrun, this pops return address, jumps there \n")
 	    
     (* emit command *) 	    
@@ -314,14 +316,14 @@ let emit_x86 e =
 	
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
-	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
-	(* cmd ("subq $" ^ n2 ^ ", %rsp") "Make space for top level locals"; *)
+	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11";
+	 cmd ("subq $" ^ n2 ^ ", %rsp") "Make space for top level locals\n";
 
-	(* emitl cl;   *)             (* main body of program *)
-	cmd "pushq $5"  "Fake result";
+	 emitl cl;               (* main body of program *)
+	 (*cmd "pushq $5"  "Fake result\n";*)
 
 	cmd "popq %rax"         "END giria : place return value in %rax";
-	(* cmd ("addq $" ^ n2 ^ ", %rsp") "pop top level locals"; *)
+  cmd ("addq $" ^ n2 ^ ", %rsp") "pop top level locals";
 	cmd "movq %rbp,%rsp"	"END giria : reset stack to previous base pointer";   
 	cmd "popq %rbp"	        "END giria : restore base pointer";
 	cmd "ret"               "END giria : return to runtime system \n";
