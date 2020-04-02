@@ -26,7 +26,8 @@ type stack_item =
   | STACK_BOOL of bool 
   | STACK_UNIT 
   | STACK_HI of heap_index    (* Pointer into Heap            *) 
-  | STACK_RA of code_index    (* return address               *) 
+  | STACK_RA of code_index    (* return address               *)
+  | STACK_CI of location      (* Simple function              *)
   | STACK_FP of stack_index   (* Frame pointer                *) 
 
 
@@ -41,7 +42,8 @@ type heap_item =
   | HEAP_BOOL of bool 
   | HEAP_UNIT 
   | HEAP_HI of heap_index    (* Pointer into Heap            *) 
-  | HEAP_CI of code_index    (* Code pointer for closures    *) 
+  | HEAP_CI of code_index    (* Code pointer for closures    *)
+  | HEAP_LAB of location
   | HEAP_HEADER of int * heap_type (* int is number of items to follow *)       
 
 
@@ -64,12 +66,13 @@ type instruction =
   | SND
   | DEREF 
   | APPLY
-  | RETURN 
+  | RETURN
+  | RETURN_SIMPLE
   | MK_PAIR 
   | MK_INL
   | MK_INR
   | MK_REF 
-  | MK_CLOSURE of location * int * int (* modified - (label, free vars, local vars) *)
+  | MK_CLOSURE of location * int  (* modified - (label, free vars) *)
   | TEST of location 
   | CASE of location
   | GOTO of location
@@ -161,6 +164,7 @@ let string_of_stack_item = function
   | STACK_UNIT       -> "STACK_UNIT"
   | STACK_HI i       -> "STACK_HI " ^ (string_of_int i)
   | STACK_RA i       -> "STACK_RA " ^ (string_of_int i)
+  | STACK_CI ((f, _))  -> "STACK_CI " ^ f
   | STACK_FP i       -> "STACK_FP " ^ (string_of_int i)
 
 let string_of_heap_type = function 
@@ -177,6 +181,7 @@ let string_of_heap_item = function
   | HEAP_UNIT       -> "HEAP_UNIT"
   | HEAP_HI i       -> "HEAP_HI " ^ (string_of_int i)
   | HEAP_CI i       -> "HEAP_CI " ^ (string_of_int i)
+  | HEAP_LAB ((f, _)) -> "HEAP_LAB " ^ f
   | HEAP_HEADER (i, t) -> "HEAP_HEADER(" ^ (string_of_int i) ^ ", " ^ (string_of_heap_type t) ^ ")"
 
 
@@ -205,15 +210,16 @@ let string_of_instruction = function
  | GOTO l   -> "GOTO " ^ (string_of_location l)
  | APPLY    -> "APPLY"
  | RETURN   -> "RETURN"
+ | RETURN_SIMPLE -> "RETURN_SIMPLE"
  | HALT     -> "HALT"
  | LABEL l  -> "LABEL " ^ l 
  | SWAP     -> "SWAP"
  | POP      -> "POP"
  | DEREF    -> "DEREF"
  | ASSIGN   -> "ASSIGN"
- | MK_CLOSURE (loc, n, m)
+ | MK_CLOSURE (loc, n)
              -> "MK_CLOSURE(" ^ (string_of_location loc) 
-	                      ^ ", " ^ (string_of_int n) ^ ", " ^ (string_of_int m) ^ ")"
+	                      ^ ", " ^ (string_of_int n) ^ ")"
 let rec string_of_listing = function 
   | [] -> "\n"  
   | (LABEL l) :: rest -> ("\n" ^ l ^ " :") ^ (string_of_listing rest) 
@@ -261,7 +267,8 @@ let rec string_of_heap_value a vm =
   | HEAP_BOOL true  -> "true"
   | HEAP_BOOL false -> "false"
   | HEAP_UNIT       -> "()"
-  | HEAP_HI i       -> string_of_heap_value i vm 
+  | HEAP_HI i       -> string_of_heap_value i vm
+  | HEAP_LAB _ -> "CLOSURE"
   | HEAP_CI _       -> Errors.complain "string_of_heap_value: expecting value in heap, found code index"
   | HEAP_HEADER (i, ht) -> 
     (match ht with 
@@ -279,6 +286,7 @@ let string_of_value vm =
   | STACK_UNIT       -> "()"
   | STACK_HI a       -> string_of_heap_value a vm
   | STACK_RA _       -> Errors.complain "string_of_value: expecting value on stack top, found code index"
+  | STACK_CI _       -> "CLOSURE"
   | STACK_FP _       -> Errors.complain "string_of_value: expecting value on stack top, found frame pointer"
 
     
@@ -293,15 +301,17 @@ let stack_to_heap_item = function
   | STACK_BOOL b -> HEAP_BOOL b
   | STACK_UNIT -> HEAP_UNIT 
   | STACK_HI i -> HEAP_HI i 
-  | STACK_RA i -> HEAP_CI i 
-  | STACK_FP i -> Errors.complain "stack_to_heap_item: no frame pointer allowed on heap" 
+  | STACK_RA i -> HEAP_CI i
+  | STACK_CI f -> HEAP_LAB f
+  | STACK_FP _ -> Errors.complain "stack_to_heap_item: no frame pointer allowed on heap"
 
 let heap_to_stack_item = function 
   | HEAP_INT i -> STACK_INT i
   | HEAP_BOOL b -> STACK_BOOL b
   | HEAP_UNIT -> STACK_UNIT 
   | HEAP_HI i -> STACK_HI i 
-  | HEAP_CI i -> STACK_RA i 
+  | HEAP_CI i -> STACK_RA i
+  | HEAP_LAB f -> STACK_CI f
   | HEAP_HEADER (_,_) -> Errors.complain "heap_to_stack_item : heap header not allowed on stack" 
 
 (* cp := cp + 1  *)     
@@ -471,17 +481,26 @@ let test(i, vm) =
 
 let return vm =
     let current_fp = vm.fp in 
-    match vm.stack.(current_fp), vm.stack.(vm.sp - 2) with
+    match vm.stack.(current_fp), vm.stack.(current_fp + 1) with
     | (STACK_FP saved_fp, STACK_RA k) -> 
        let return_value = stack_top vm 
-       in push(return_value, { vm with cp = k; fp = saved_fp ; sp = current_fp - 2}) 
+       in push(return_value, { vm with cp = k; fp = saved_fp ; sp = current_fp - 2})
     | _ -> Errors.complain "return : malformed stack frame" 
+
+let return_simple vm =
+  let current_fp = vm.fp in
+  match vm.stack.(current_fp), vm.stack.(current_fp + 1) with
+  | (STACK_FP saved_fp, STACK_RA k) ->
+     let return_value = stack_top vm
+     (* Only FP-1 as no closure on the stack *)
+     in push(return_value, { vm with cp = k; fp = saved_fp ; sp = current_fp - 1})
+  | _ -> Errors.complain "return : malformed stack frame"
 
 let fetch fp vm = function 
   | STACK_LOCATION offset -> vm.stack.(fp + offset)
   | HEAP_LOCATION offset -> 
     (match vm.stack.(fp - 1) with 
-    | STACK_HI a -> heap_to_stack_item (vm.heap.(a + offset + 2)) (* Move past code ptr + locals count *)
+    | STACK_HI a -> heap_to_stack_item (vm.heap.(a + offset + 1)) (* Move past code ptr *)
     | _ -> Errors.complain "search : expecting closure pointer"
     )
 
@@ -493,35 +512,40 @@ let update fp vm = function
 let lookup fp vm vlp = push(fetch fp vm vlp, vm)
 
 let mk_closure = function 
-  | ((_, Some i), n, m, vm) ->
-    let (a, vm1) = allocate(3 + n, vm)       in
-    let header = HEAP_HEADER (3 + n, HT_CLOSURE) in
+  | ((_, Some i), n, vm) ->
+    let (a, vm1) = allocate(2 + n, vm)       in
+    let header = HEAP_HEADER (2 + n, HT_CLOSURE) in
     let code_address = HEAP_CI i             in 
     let _ = vm1.heap.(a)     <- header       in 
     let _ = vm1.heap.(a + 1) <- code_address in
-    let _ = vm1.heap.(a + 2) <- HEAP_INT m   in (* Number of local vars used *)
     let rec aux m = 
         if m = n 
         then () 
-        else let v = stack_to_heap_item vm1.stack.(vm.sp - (m + 1)) in 
-             let _ = vm1.heap.(a + m + 3) <- v in
+        else let v = stack_to_heap_item vm1.stack.(vm.sp - (m + 1)) in
+             let _ = vm1.heap.(a + m + 2) <- v in
                 aux (m + 1)
     in 
     let _ = aux 0 in 
     let vm2 = pop(n, vm1) in push(STACK_HI a, vm2) 
-  | ((_, None), _, _, _) ->  Errors.complain "mk_closure : internal error, no address in closure!"
+  | ((_, None), _, _) ->  Errors.complain "mk_closure : internal error, no address in closure!"
 
 let apply vm = 
     match stack_top vm with 
     | STACK_HI a -> 
-        (match (vm.heap.(a+1), vm.heap.(a+2)) with
-        | (HEAP_CI i, HEAP_INT m) ->
+        (match vm.heap.(a+1) with
+        | HEAP_CI i ->
           let new_fp = vm.sp 
           in let saved_fp = STACK_FP vm.fp
           in let return_index = STACK_RA (vm.cp + 1) 
           in let new_vm = push(saved_fp, { vm with cp = i; fp = new_fp })
-          in push(return_index, {new_vm with sp = new_vm.sp + m}) (* Leave space for local vars *)
-        | _ -> Errors.complain "apply: runtime error, expecting code index in heap") 
+          in push(return_index, new_vm)
+        | _ -> Errors.complain "apply: runtime error, expecting code index in heap")
+    | STACK_CI ((_, Some i)) ->
+      let new_fp = vm.sp
+      in let saved_fp = STACK_FP vm.fp
+      in let return_index = STACK_RA (vm.cp + 1)
+      in let new_vm = push(saved_fp, { vm with cp = i; fp = new_fp })
+      in push(return_index, new_vm)
     | _ -> Errors.complain "apply: runtime error, expecting heap index on top of stack" 
 
 
@@ -539,8 +563,9 @@ let step vm =
   | APPLY             -> apply vm 
   | LOOKUP vp         -> advance_cp (lookup vm.fp vm vp)
   | SETLOCAL offset   -> advance_cp (update vm.fp vm offset)
-  | RETURN            -> return vm 
-  | MK_CLOSURE(l, n, m)  -> advance_cp (mk_closure(l, n, m, vm))
+  | RETURN            -> return vm
+  | RETURN_SIMPLE     -> return_simple vm
+  | MK_CLOSURE(l, n)  -> advance_cp (mk_closure(l, n, vm))
 
   | SWAP              -> advance_cp (swap vm)
   | POP               -> advance_cp (pop (1, vm))
@@ -569,7 +594,8 @@ let map_instruction_labels f = function
      | GOTO (lab, _) -> GOTO(lab, Some(f lab))
      | TEST (lab, _) -> TEST(lab, Some(f lab))
      | CASE (lab, _) -> CASE(lab, Some(f lab))
-     | MK_CLOSURE ((lab, _), n, m) -> MK_CLOSURE((lab, Some(f lab)), n, m)
+     | MK_CLOSURE ((lab, _), n) -> MK_CLOSURE((lab, Some(f lab)), n)
+     | PUSH (STACK_CI ((lab, _))) -> PUSH(STACK_CI ((lab, Some(f lab))))
      | inst -> inst 
 
 let rec find l y = 
@@ -615,8 +641,8 @@ let initial_state l =
 let first_frame vm n =
     let saved_fp = STACK_FP 0
     in let return_index = STACK_RA 0
-    in let new_vm = push(saved_fp, vm)
-    in push(return_index, {new_vm with sp = new_vm.sp + n})
+    in let new_vm = push(return_index, push(saved_fp, vm))
+    in {new_vm with sp = new_vm.sp + n} (* Leave space for n globals *)
 
 let run (l, n) =
     let vm = driver 1 (first_frame (initial_state l) n) in
@@ -673,6 +699,10 @@ let positions l =
 
    Should we also search within this?
  *)
+
+let rec init x = function
+  | 0 -> []
+  | n -> x :: init x (n-1)
 
 let rec comp vmap = function
   | Unit           -> ([], [PUSH STACK_UNIT]) 
@@ -743,8 +773,8 @@ let rec comp vmap = function
  (* Replace to follow local function convention *)
  (* Will need to use i *)
  | Let((x, e, i), e2) -> let (defs1, c1) = comp vmap e in
-   let (defs2, c2) = comp ((x, STACK_LOCATION i)::vmap) e2 in
-   (defs1 @ defs2, c1 @ [SETLOCAL (STACK_LOCATION i)] @ c2)
+   let (defs2, c2) = comp ((x, STACK_LOCATION (i+1))::vmap) e2 in
+   (defs1 @ defs2, c1 @ [SETLOCAL (STACK_LOCATION (i+1))] @ c2)
  | LetFun(f, l, e, i) -> let_fun vmap (f, l, e, i, false)
  | Lambda(x, e, i)    -> comp_lambda vmap (x, e, i) (* Will need to use i *)
  | LetRecFun(f, l, e, i) -> let_fun vmap (f, l, e, i, true)
@@ -759,8 +789,9 @@ and comp_lambda vmap (x, e, i) =
     let env_bind = List.map fvar_bind (positions fvars) in 
     let new_vmap = x_bind :: (env_bind @ vmap) in
     let (defs, c) = comp new_vmap e in
-    let def = [LABEL f] @ c @ [RETURN] in 
-     (def @ defs, (List.rev fetch_fvars) @ [MK_CLOSURE((f, None), List.length fvars, i)])
+    let def = [LABEL f] @ (init (PUSH (STACK_INT 0)) i) @ c @ [RETURN] in
+    if fvars = [] then (def @ defs, [PUSH (STACK_CI ((f, None)))])
+    else (def @ defs, (List.rev fetch_fvars) @ [MK_CLOSURE((f, None), List.length fvars)])
 
 and let_fun vmap (f, (x, e, i1), e2, i2, recursive) =
   let bound_vars = if recursive then [x; f] else [x] in
@@ -774,11 +805,12 @@ and let_fun vmap (f, (x, e, i1), e2, i2, recursive) =
   let new_vmap = x_bind :: (f_bind @ env_bind @ vmap) in
   let (defs, c) = comp new_vmap e in
 
-  let (defs2, c2) = comp ((f, STACK_LOCATION i2) :: vmap) e2 in
+  let (defs2, c2) = comp ((f, STACK_LOCATION (i2+1)) :: vmap) e2 in
 
-  let def = [LABEL f_lab] @ c @ [RETURN] in
-   (def @ defs @ defs2, (List.rev fetch_fvars) @
-   [MK_CLOSURE((f_lab, None), List.length fvars, i1); SETLOCAL (STACK_LOCATION i2)] @ c2)
+  let def = [LABEL f_lab] @ (init (PUSH (STACK_INT 0)) i1) @ c @ [RETURN] in
+  if fvars = [] then (def @ defs @ defs2, [PUSH(STACK_CI ((f_lab, None))); SETLOCAL (STACK_LOCATION (i2+1))] @ c2)
+  else (def @ defs @ defs2, (List.rev fetch_fvars) @
+   [MK_CLOSURE((f_lab, None), List.length fvars); SETLOCAL (STACK_LOCATION (i2+1))] @ c2)
 
 let compile e =
     let (e, n) = jTranslate 0 e in (* n is number of top level local vars *)

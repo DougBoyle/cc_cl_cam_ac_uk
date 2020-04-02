@@ -21,7 +21,8 @@ type stack_item =
   | STACK_BOOL of bool 
   | STACK_UNIT 
   | STACK_HI of heap_index    (* Pointer into Heap            *) 
-  | STACK_RA of code_index    (* return address               *) 
+  | STACK_RA of code_index    (* return address               *)
+  | STACK_CI of location
   | STACK_FP of stack_index   (* Frame pointer                *) 
 
 type heap_type = 
@@ -35,7 +36,8 @@ type heap_item =
   | HEAP_BOOL of bool 
   | HEAP_UNIT 
   | HEAP_HI of heap_index    (* Pointer into Heap            *) 
-  | HEAP_CI of code_index    (* Code pointer for closures    *) 
+  | HEAP_CI of code_index    (* Code pointer for closures    *)
+  | HEAP_LAB of location
   | HEAP_HEADER of int * heap_type (* int is number of items to follow *)       
 
 type value_path = 
@@ -56,12 +58,13 @@ type instruction =
   | SND
   | DEREF 
   | APPLY
-  | RETURN 
+  | RETURN
+  | RETURN_SIMPLE
   | MK_PAIR 
   | MK_INL
   | MK_INR
   | MK_REF 
-  | MK_CLOSURE of location * int * int (* modified *)
+  | MK_CLOSURE of location * int (* modified *)
   | TEST of location 
   | CASE of location
   | GOTO of location

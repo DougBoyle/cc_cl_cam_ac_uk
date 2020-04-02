@@ -185,7 +185,7 @@ let emit_x86 e =
 	    cmd ("popq " ^ j ^ "(%rbp)") "Set local variable")
 
    in let heap_lookup i =
-	(let j = string_of_int (8 * (i + 1)) in (* +1 to account for storing num locals in closure *)
+	(let j = string_of_int (8 * i) in
 	 (cmd "movq 8(%rbp), %rax"               "BEGIN heap lookup, copy closure pointer to %rax";
  	  cmd ("movq " ^ j ^ "(%rax)" ^ ",%r10") ("put closue value at index " ^ (string_of_int i) ^ " in scratch register");
 	  cmd "pushq %r10"                       "END heap lookup, push value \n"))
@@ -224,9 +224,8 @@ let emit_x86 e =
 	  cmd "movq %rax,(%rsp)"   "copy value to ref cell in heap";
       	  cmd "movq $0,(%rsp)"     "END assign, replace heap pointer with unit \n")
 
-    in let closure(l, n, locals) =
-	(let m = string_of_int (n + 2) in
-	 let locals2 = string_of_int (8 * locals) in
+    in let closure(l, n) =
+	(let m = string_of_int (n + 1) in
 	 (cmd "movq %r11,%rdi"                   "BEGIN make closure, alloc arg 1 in %rdi"; 
 	  cmd ("movq $" ^ m ^ ",%rsi")           "arg 2 to alloc in %rsi";
 	  cmd "movq $0,%rax"                     "signal no floating point args";
@@ -235,8 +234,7 @@ let emit_x86 e =
 	  cmd "popq %r11"                        "restore %r11"; 		    	  	  
 	  cmd ("leaq " ^ l ^ "(%rip)" ^ ",%r10") "place code address in scratch register";
 	  cmd ("movq %r10,(%rax)")               "place code address in heap closure";
-	  cmd ("movq $" ^ locals2 ^ ", 8(%rax)") "Remember amount of space to save for locals";
-   	  for i = 2 to n+1 do
+   	  for i = 1 to n do
 	    let j = string_of_int (8 * i) in  
 	    (cmd ("popq %r10")                   "pop value into the scratch register";
 	     cmd ("movq %r10," ^ j ^ "(%rax)")   "copy value to the heap")
@@ -246,14 +244,10 @@ let emit_x86 e =
 	      
     in let apply () =
 	    (cmd "movq (%rsp),%rax"   "BEGIN apply, copy closure pointer to %rax";
-	     cmd "movq 8(%rax),%r10"  "Get offset size for locals";
        cmd "movq (%rax),%rax"   "get the the function address from heap";
 	     cmd "pushq %rbp"         "save the frame pointer";
 	     cmd "movq %rsp,%rbp"     "set new frame pointer";
-	     cmd "subq %r10, %rsp"    "Leave space for local variables";
        cmd "call *%rax"         "call pushes return address, jumps to function";
-       cmd "movq 8(%rbp), %r10" "get closure pointer";
-       cmd "addq 8(%r10), %rsp" "pop local variables";
 	     cmd "popq %rbp"          "retore base pointer";
 	     cmd "addq $8, %rsp"      "pop closure";
 	     cmd "addq $8, %rsp"      "pop argument";
@@ -261,6 +255,7 @@ let emit_x86 e =
 	      
     in let ret () = 
 	    (cmd "popq %rax"         "BEGIN return. put top-of-stack in %rax";
+	     cmd "pushq -8(%rbp)"    "Copy return address above local variables ready for ret";
        cmd "ret"               "END retrun, this pops return address, jumps there \n")
 	    
     (* emit command *) 	    
@@ -277,12 +272,14 @@ let emit_x86 e =
 	  | ASSIGN   -> assign()
 	  | APPLY    -> apply () 
 	  | RETURN   -> ret()
+	  (* Have to treat simple/regular functions the same, both are closures *)
+	  | RETURN_SIMPLE -> ret()
 	  | LABEL l  -> label l 
 	  | SWAP     -> swap ()
 	  | TEST (l, _) -> test l 			     			     
 	  | GOTO (l, _) -> goto l 			     
 	  | CASE (l, _) -> case l
-	  | MK_CLOSURE ((l, _), n, m)         -> closure(l, n, m)
+	  | MK_CLOSURE ((l, _), n)         -> closure(l, n)
 	  | LOOKUP (STACK_LOCATION offset) -> stack_lookup (0 - offset) (* stack grows downward, so negate offsets *) 
 	  | LOOKUP (HEAP_LOCATION offset)  -> heap_lookup offset
 	  | SETLOCAL (STACK_LOCATION offset) -> stack_update (-offset) (* stack grows downward *)
@@ -295,13 +292,15 @@ let emit_x86 e =
 	  | PUSH (STACK_HI i)       -> complain "Internal Error : Jargon code never explicitly pushes stack pointer"
 	  | PUSH (STACK_RA i)       -> complain "Internal Error : Jargon code never explicitly pushes return address"
 	  | PUSH (STACK_FP i)       -> complain "Internal Error : Jargon code never explicitly pushes frame pointer"
+	  (* Don't have OCaml tags to distinguish simple functions, so have to treat as usual closure *)
+	  | PUSH (STACK_CI (l, _))  -> closure(l, 0)
 	  | HALT                    -> complain "HALT found in Jargon code from Jargon.comp"
 
     in let rec emitl = function [] -> () | c::l -> (emitc c; emitl l)
 
     in let do_command s = if 0 = Sys.command s then () else complain ("command failed: " ^ s) 
 
-    in let n2 = string_of_int (8 * n)
+    in let n2 = string_of_int (8 * (n+1)) (* +1 to make up for RA in different place on bottom frame *)
 
     in let (defs, cl) = comp [] e           (* compile to Jargon code with Jargon.comp  *)
        in (* emit header *)
@@ -316,12 +315,13 @@ let emit_x86 e =
 	cmd "pushq %rbp"	"BEGIN giria : save base pointer"; 
 	cmd "movq %rsp,%rbp"    "BEGIN giria : set new base pointer";
 	cmd "movq %rdi,%r11"    "BEGIN giria : save pointer to heap in %r11 \n";
-	cmd ("subq $" ^ n2 ^ ", %rsp") "Make space for top level locals";
+	(* cmd ("subq $" ^ n2 ^ ", %rsp") "Make space for top level locals"; *)
 
-	emitl cl;               (* main body of program *)
-	
+	(* emitl cl;   *)             (* main body of program *)
+	cmd "pushq $5"  "Fake result";
+
 	cmd "popq %rax"         "END giria : place return value in %rax";
-	cmd ("addq $" ^ n2 ^ ", %rsp") "pop top level locals";
+	(* cmd ("addq $" ^ n2 ^ ", %rsp") "pop top level locals"; *)
 	cmd "movq %rbp,%rsp"	"END giria : reset stack to previous base pointer";   
 	cmd "popq %rbp"	        "END giria : restore base pointer";
 	cmd "ret"               "END giria : return to runtime system \n";
