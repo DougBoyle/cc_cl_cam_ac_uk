@@ -61,6 +61,9 @@ rule token = parse
   | "bool" { BOOL }
   | "int" { INTTYPE }
   | "unit" { UNITTYPE }
+  | "match" { MATCH }
+  | "with" { WITH }
+  | "type" { TYPEDECL }
   | int_reg_exp { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | ident_reg_exp { IDENT (Lexing.lexeme lexbuf) }
   | "(*" { comment lexbuf; token lexbuf }

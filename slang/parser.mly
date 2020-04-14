@@ -12,7 +12,7 @@ let get_loc = Parsing.symbol_start_pos
 %token<string> IDENT
 %token EOF LPAREN RPAREN COMMA COLON SEMICOLON ADD SUB MUL DIV NOT EQUAL LT ANDOP OROP 
 %token WHAT UNIT AND TRUE FALSE IF FI THEN ELSE LET REC IN BEGIN END BOOL INTTYPE UNITTYPE 
-%token ARROW BAR INL INR FST SND FUN NUF CASE OF REF ASSIGN BANG WHILE DO OD 
+%token ARROW BAR INL INR FST SND FUN NUF CASE OF REF ASSIGN BANG WHILE DO MATCH WITH TYPEDECL
 
 %left ADD SUB                     /* lowest precedence */
 %left MUL DIV ANDOP OROP EQUAL ARROW  LT /* medium precedence */
@@ -37,13 +37,23 @@ let get_loc = Parsing.symbol_start_pos
 /* Grammar  */
 
 start: 
-| expr EOF { $1 }
+| toplevel EOF { Past.Seq(get_loc(), $1) }
 
 /* problem 
    -e  (unary minus) 
     e e (application) 
     e1 - e2  (is the e1(-e2) or e1-e2???) 
 */
+
+/* TODO: Always making top level a Seq is inefficient */
+toplevel:
+| decl { [$1] }
+| expr { [$1] }
+| decl SEMICOLON toplevel { $1 :: $3 }
+| expr SEMICOLON toplevel { $1 :: $3 }
+
+decl:
+| TYPEDECL IDENT EQUAL decloptions { Past.Decl(get_loc(), $2, $4) }
 
 simple_expr:
 | UNIT                               { Past.Unit (get_loc())}
@@ -88,11 +98,31 @@ expr:
   BAR INR LPAREN IDENT COLON texpr RPAREN  ARROW expr 
   END 
                                      { Past.Case (get_loc(), $2, ($6, $8, $11), ($15, $17, $20)) }
+/* | MATCH expr WITH matchlist END*/
+
 
 exprlist:
 |   expr                             { [$1] }
 |   expr  SEMICOLON exprlist         { $1 :: $3  }
 
+decloptions:
+| IDENT OF texpr { [($1, $3)] }
+| IDENT OF texpr BAR decloptions { ($1, $3)::$5 }
+
+/* For now treat all constructors as Name(Arg)
+  Nil becomes Nil(unit), can do as syntactic sugar later.
+   Also remove need for initial BAR
+
+   match e with
+   | Cons(x) -> e1
+   | Nil(y) -> e2
+
+*/
+/*
+matchlist:
+| BAR IDENT LPAREN IDENT RPAREN ARROW expr { [($2, $4, $7)] }
+| BAR IDENT LPAREN IDENT RPAREN ARROW expr matchlist { ($2, $4, $7)::$8 }
+*/
 
 texpr: 
 | BOOL                               { Past.TEbool  }

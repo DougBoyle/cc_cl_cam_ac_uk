@@ -50,6 +50,8 @@ type expr =
        | LetFun of loc * var * lambda * type_expr * expr
        | LetRecFun of loc * var * lambda * type_expr * expr
 
+       | Decl of loc * string * (string * type_expr) list
+
 and lambda = var * type_expr * expr 
 
 let  loc_of_expr = function 
