@@ -105,6 +105,7 @@ exprlist:
 |   expr                             { [$1] }
 |   expr  SEMICOLON exprlist         { $1 :: $3  }
 
+/* Currently doesn't allow nested datastructures as type must be already defined */
 decloptions:
 | IDENT OF texpr { [($1, $3)] }
 | IDENT OF texpr BAR decloptions { ($1, $3)::$5 }
@@ -124,7 +125,8 @@ matchlist:
 | BAR IDENT LPAREN IDENT RPAREN ARROW expr matchlist { ($2, $4, $7)::$8 }
 */
 
-texpr: 
+texpr:
+| IDENT                              { Past.TEcustom($1) }
 | BOOL                               { Past.TEbool  }
 | INTTYPE                            { Past.TEint  }
 | UNITTYPE                           { Past.TEunit  }

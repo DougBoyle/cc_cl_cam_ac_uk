@@ -64,5 +64,7 @@ let rec translate_expr = function
     | Past.Deref(_, e) -> Ast.Deref(translate_expr e)
     | Past.Assign(_, e1, e2) -> Ast.Assign(translate_expr e1, translate_expr e2)
 
+    | Past.Decl(_, _, _) -> Ast.Unit (* TODO: Optimise to shrink sequence by 1 expr *)
+
 and translate_lambda (x, _, body) = (x, translate_expr body) 
 

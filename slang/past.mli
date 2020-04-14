@@ -13,6 +13,7 @@ type type_expr =
    | TEarrow of type_expr * type_expr
    | TEproduct of type_expr * type_expr
    | TEunion of type_expr * type_expr
+   | TEcustom of string
 
 type oper = ADD | MUL | DIV | SUB | LT | AND | OR | EQ | EQB | EQI
 
