@@ -34,6 +34,7 @@ type value =
      | INR of value 
      | CLOSURE of closure    
      | REC_CLOSURE of code
+     | TAGGED of string * value
 
 and closure = code * env 
 
@@ -59,6 +60,7 @@ and instruction =
   | TEST of code * code
   | CASE of code * code
   | WHILE of code * code
+  | MKTAG of string
 
 and code = instruction list 
 
@@ -95,6 +97,7 @@ let rec string_of_value = function
      | INR  v          -> "inr(" ^ (string_of_value v) ^ ")"
      | CLOSURE(cl) -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE(c) -> "REC_CLOSURE(" ^ (string_of_code c) ^ ")"
+     | TAGGED (s, v) -> s ^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (c, env) = 
    "(" ^ (string_of_code c) ^ ", " ^ (string_of_env env) ^ ")"
@@ -125,6 +128,7 @@ and string_of_instruction = function
  | ASSIGN       -> "ASSIGN"
  | MK_CLOSURE c -> "MK_CLOSURE(" ^ (string_of_code c) ^ ")" 
  | MK_REC(f, c) -> "MK_REC(" ^ f ^ ", " ^ (string_of_code c) ^ ")"
+ | MKTAG s -> "MKTAG " ^ s
 
 and string_of_code c = string_of_list ";\n " string_of_instruction c 
 
@@ -265,6 +269,7 @@ let step = function
  | (MK_REC(f, c) :: ds,                    evs, s) -> (ds,  V(mk_rec(f, c, evs_to_env evs)) :: evs, s)
  | (APPLY :: ds,  V(CLOSURE (c, env)) :: (V v) :: evs, s) 
                                                    -> (c @ ds, (V v) :: (EV env) :: evs, s)
+ | ((MKTAG tag)::ds,                (V v)::evs, s) -> (ds, V(TAGGED(tag, v))::evs, s)
  | state -> complain ("step : bad state = " ^ (string_of_interp_state state) ^ "\n")
 
 let rec driver n state = 
@@ -321,6 +326,7 @@ let rec compile = function
        (MK_REC(f, (BIND x) :: (compile body) @ leave_scope)) ::  
        (BIND f) :: 
        (compile e) @ leave_scope
+ | Tagged (s, e) -> (compile e) @ [MKTAG s]
 
 
 (* The initial Slang state is the Slang state : all locations contain 0 *) 

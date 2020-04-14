@@ -26,12 +26,13 @@ type stack_item =
   | STACK_RA of code_index    (* return address               *) 
   | STACK_FP of stack_index   (* Frame pointer                *) 
 
-
+(* TODO: Have ocaml store list of all names used, put index into table in headers instead *)
 type heap_type = 
   | HT_PAIR 
   | HT_INL 
   | HT_INR 
-  | HT_CLOSURE 
+  | HT_CLOSURE
+  | HT_TAG of string (* For x86, will need to make table of strings then use pointers to table *)
 
 type heap_item = 
   | HEAP_INT of int 
@@ -69,7 +70,8 @@ type instruction =
   | CASE of location
   | GOTO of location
   | LABEL of label 
-  | HALT 
+  | HALT
+  | MKTAG of string
 
 type listing = instruction list 
 
@@ -123,6 +125,7 @@ let string_of_heap_type = function
     | HT_INL     -> "HT_INL"
     | HT_INR     -> "HT_INR"
     | HT_CLOSURE -> "HT_CLOSURE"
+    | HT_TAG s   -> "HT_TAG " ^ s
 
 
 let string_of_heap_item = function 
@@ -168,6 +171,8 @@ let string_of_instruction = function
  | MK_CLOSURE (loc, n)  
              -> "MK_CLOSURE(" ^ (string_of_location loc) 
 	                      ^ ", " ^ (string_of_int n) ^ ")"
+ | MKTAG s  -> "MKTAG " ^ s
+
 let rec string_of_listing = function 
   | [] -> "\n"  
   | (LABEL l) :: rest -> ("\n" ^ l ^ " :") ^ (string_of_listing rest) 
@@ -223,6 +228,7 @@ let rec string_of_heap_value a vm =
     | HT_INL -> "inl(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_INR -> "inr(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_CLOSURE -> "CLOSURE"
+    | HT_TAG s -> s ^ "(" ^ (string_of_heap_value (a+1) vm) ^ ")"
     )
 
 let string_of_value vm = 
@@ -473,6 +479,12 @@ let apply vm =
         | _ -> Errors.complain "apply: runtime error, expecting code index in heap") 
     | _ -> Errors.complain "apply: runtime error, expecting heap index on top of stack" 
 
+let mk_tag vm s =
+  let (v, vm1) = pop_top vm in
+  let (a, vm2) = allocate(2, vm1) in
+  let _ = Array.set vm2.heap a (HEAP_HEADER (2, HT_TAG s)) in
+  let _ = Array.set vm2.heap (a+1) (stack_to_heap_item v) in
+      push(STACK_HI a, vm2)
 
 let step vm = 
  match get_instruction vm with 
@@ -499,7 +511,8 @@ let step vm =
   | HALT              -> { vm with status = Halted } 
   | GOTO (_, Some i)  -> goto(i, vm) 
   | TEST (_, Some i)  -> test(i, vm) 
-  | CASE (_, Some i)  -> case(i, vm) 
+  | CASE (_, Some i)  -> case(i, vm)
+  | MKTAG s           -> advance_cp (mk_tag vm s)
 
   | _ -> Errors.complain ("step : bad state = " ^ (string_of_state vm) ^ "\n")
 
@@ -689,6 +702,7 @@ let rec comp vmap = function
                       let (defs1, c1) = comp vmap (Lambda(f, e2)) in  
                       let (defs2, c2) = comp_lambda vmap (Some f, x, e1) in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
+ | Tagged(s, e) -> let (defs, c) = comp vmap e in (defs, c @ [MKTAG s])
 
 and comp_lambda vmap (f_opt, x, e) = 
     let bound_vars = match f_opt with | None -> [x]          | Some f -> [x; f] in 

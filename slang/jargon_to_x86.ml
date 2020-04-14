@@ -283,6 +283,7 @@ let emit_x86 e =
 	  | PUSH (STACK_RA i)       -> complain "Internal Error : Jargon code never explicitly pushes return address"
 	  | PUSH (STACK_FP i)       -> complain "Internal Error : Jargon code never explicitly pushes frame pointer"
 	  | HALT                    -> complain "HALT found in Jargon code from Jargon.comp"
+	  | MKTAG _                 -> complain "Datatypes not yet implemented in x86"
 
     in let rec emitl = function [] -> () | c::l -> (emitc c; emitl l)
 

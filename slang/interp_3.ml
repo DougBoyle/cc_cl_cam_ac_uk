@@ -36,6 +36,7 @@ type value =
      | INR of value 
      | CLOSURE of location * env
      | REC_CLOSURE of location
+     | TAGGED of string * value
 
 and instruction = 
   | PUSH of value 
@@ -61,7 +62,8 @@ and instruction =
   | CASE of location
   | GOTO of location
   | LABEL of label 
-  | HALT 
+  | HALT
+  | MKTAG of string
 
 and code = instruction list 
 
@@ -122,6 +124,7 @@ let rec string_of_value = function
      | INR  v          -> "inr(" ^ (string_of_value v) ^ ")"
      | CLOSURE (loc, c) -> "CLOSURE(" ^ (string_of_closure (loc, c)) ^ ")"
      | REC_CLOSURE(loc) -> "REC_CLOSURE(" ^ (string_of_location loc) ^ ")"
+     | TAGGED (s, v) -> s ^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (loc, env) = 
    "(" ^ (string_of_location loc) ^ ", " ^ (string_of_env env) ^ ")"
@@ -159,6 +162,7 @@ and string_of_instruction = function
  | ASSIGN   -> "ASSIGN"
  | MK_CLOSURE loc  -> "MK_CLOSURE(" ^ (string_of_location loc) ^ ")"
  | MK_REC (v, loc) -> "MK_REC(" ^ v ^ ", " ^ (string_of_location loc) ^ ")"
+ | MKTAG s -> "MKTAG " ^ s
 
 and string_of_code c = string_of_list "\n " string_of_instruction c 
 
@@ -257,7 +261,8 @@ let step (cp, evs) =
  | (RETURN,    (V v) :: _ :: (RA i) :: evs) -> (i, (V v) :: evs) 
  | (LABEL l,                           evs) -> (cp + 1, evs) 
  | (HALT,                              evs) -> (cp, evs) 
- | (GOTO (_, Some i),                  evs) -> (i, evs) 
+ | (GOTO (_, Some i),                  evs) -> (i, evs)
+ | (MKTAG tag,                (V v) :: evs) -> (cp + 1, V(TAGGED(tag, v))::evs)
  | _ -> complain ("step : bad state = " ^ (string_of_state (cp, evs)) ^ "\n")
 
 (* COMPILE *) 
@@ -372,6 +377,7 @@ let rec comp = function
                       let def = [LABEL lab; BIND x] @ c1 @ [SWAP; POP; RETURN] in
                           (def @ defs1 @ defs2, 
                            [MK_REC(f, (lab, None)); BIND f] @ c2 @ [SWAP; POP])
+ | Tagged (s, e) -> let (defs, c) = comp e in (defs, c @ [MKTAG s])
 let compile e = 
     let (defs, c) = comp e in 
     let result = c @               (* body of program *) 

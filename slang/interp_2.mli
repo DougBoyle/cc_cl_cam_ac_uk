@@ -13,6 +13,7 @@ type value =
      | INR of value 
      | CLOSURE of closure    
      | REC_CLOSURE of code
+     | TAGGED of string * value
 
 and closure = code * env 
 
@@ -39,6 +40,7 @@ and instruction =
   | TEST of code * code
   | CASE of code * code
   | WHILE of code * code
+  | MKTAG of string
 
 and code = instruction list 
 

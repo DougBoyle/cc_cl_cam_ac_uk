@@ -10,7 +10,8 @@ type value =
      | INL of value 
      | INR of value 
      | REC_CLOSURE of closure
-     | CLOSURE of closure  
+     | CLOSURE of closure
+     | TAGGED of string * value
 
 and closure = Ast.var * Ast.expr * env 
 
@@ -33,7 +34,8 @@ and continuation_action =
   | DEREF 
   | CASE of Ast.var * Ast.expr * Ast.var * Ast.expr * env 
   | APPLY of value 
-  | ARG of Ast.expr * env 
+  | ARG of Ast.expr * env
+  | MKTAG of string
 
 and continuation = continuation_action  list
 

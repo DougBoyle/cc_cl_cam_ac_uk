@@ -28,7 +28,8 @@ type heap_type =
     | HT_PAIR 
     | HT_INL 
     | HT_INR 
-    | HT_CLOSURE 
+    | HT_CLOSURE
+    | HT_TAG of string
 
 type heap_item = 
   | HEAP_INT of int 
@@ -65,7 +66,8 @@ type instruction =
   | CASE of location
   | GOTO of location
   | LABEL of label 
-  | HALT 
+  | HALT
+  | MKTAG of string
 
 
 type vm_state = 

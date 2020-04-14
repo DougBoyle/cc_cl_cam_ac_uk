@@ -55,8 +55,6 @@ let make_let loc x t (e1, t1) (e2, t2)  =
 let make_if loc (e1, t1) (e2, t2) (e3, t3) = 
      match t1 with 
      | TEbool ->
-          let _ = Printf.printf "%s\n" (string_of_type t2) in
-          let _ = Printf.printf "%s\n" (string_of_type t3) in
           if match_types (t2, t3) 
           then (If(loc, e1, e2, e3), t2) 
           else report_type_mismatch (e2, t2) (e3, t3) 

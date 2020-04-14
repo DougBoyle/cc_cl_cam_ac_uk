@@ -15,6 +15,7 @@ type value =
   | INR of value 
   | CLOSURE of location * env
   | REC_CLOSURE of location
+  | TAGGED of string * value
 
 and instruction = 
   | PUSH of value 
@@ -40,7 +41,8 @@ and instruction =
   | CASE of location
   | GOTO of location
   | LABEL of label 
-  | HALT 
+  | HALT
+  | MKTAG of string
 
 and code = instruction list 
 

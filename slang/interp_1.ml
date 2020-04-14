@@ -28,7 +28,8 @@ type value =
      | INL of value 
      | INR of value 
      | REC_CLOSURE of closure
-     | CLOSURE of closure 
+     | CLOSURE of closure
+     | TAGGED of string * value
 
 and closure = var * expr * env 
 
@@ -51,7 +52,8 @@ and continuation_action =
   | DEREF 
   | CASE of var * expr * var * expr * env 
   | APPLY of value 
-  | ARG of expr * env 
+  | ARG of expr * env
+  | MKTAG of string
 
 and continuation = continuation_action  list
 
@@ -148,6 +150,7 @@ let rec string_of_value = function
      | INR v          -> "INR(" ^ (string_of_value v) ^ ")"
      | CLOSURE cl     -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE cl -> "REC_CLOSURE(" ^ string_of_closure cl ^ ")"
+     | TAGGED (s, v) -> s ^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (x, e, env) = x ^ ", " ^ (Ast.string_of_expr e) ^  ", " ^ (string_of_env env)
 
@@ -186,7 +189,8 @@ let string_of_continuation_action = function
   | WHILE (e1, e2, env) -> 
       "WHILE(" ^ (Ast.string_of_expr e1) ^ ", " ^ (Ast.string_of_expr e2) ^ ", " ^ (string_of_env env) ^ ")"
   | MKREF -> "MKREF" 
-  | DEREF -> "DEREF" 
+  | DEREF -> "DEREF"
+  | MKTAG s -> "MKTAG " ^ s
 
 let string_of_continuation = string_of_list ";\n " string_of_continuation_action
 
@@ -231,6 +235,7 @@ let step = function
  | EXAMINE(Seq [e],                     env, k) -> EXAMINE(e, env, k) 
  | EXAMINE(Seq (e :: rest),             env, k) -> EXAMINE(e, env, TAIL (rest, env) :: k) 
  | EXAMINE(While(e1, e2),               env, k) -> EXAMINE(e1, env, WHILE(e1, e2, env) :: k)
+ | EXAMINE(Tagged(s, e),                env, k) -> EXAMINE(e, env, MKTAG(s) :: k)
  (* EXAMINE --> COMPUTE *) 
  | EXAMINE(Unit,              _, k) -> COMPUTE(k, UNIT) 
  | EXAMINE(Var x,           env, k) -> COMPUTE(k, lookup (env, x))
@@ -248,7 +253,8 @@ let step = function
  | COMPUTE(MKREF :: k,         v) -> COMPUTE(k , mk_ref v)
  | COMPUTE(DEREF :: k,     REF a) -> COMPUTE(k , heap.(a))
  | COMPUTE(ASSIGN (REF a) :: k, v) -> let _ = do_assign a v in COMPUTE(k , UNIT) 
- | COMPUTE(WHILE (_, _, _) :: k,         BOOL false) -> COMPUTE(k, UNIT) 
+ | COMPUTE(WHILE (_, _, _) :: k,         BOOL false) -> COMPUTE(k, UNIT)
+ | COMPUTE(MKTAG(s)::k,        v) -> COMPUTE(k, TAGGED(s, v))
  (* COMPUTE --> EXAMINE *) 
  | COMPUTE(OPER_FST (e2, env, op) :: k,         v1)  -> EXAMINE(e2, env, OPER (op, v1) :: k)
  | COMPUTE((APPLY v2) :: k, CLOSURE(x, body, env))  -> EXAMINE(body, update(env, (x, v2)), k)

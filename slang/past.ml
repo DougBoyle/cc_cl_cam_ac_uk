@@ -16,16 +16,12 @@ type type_expr =
    | TEproduct of type_expr * type_expr
    | TEunion of type_expr * type_expr
    | TEcustom of string * loc
-   (* e.g. TEcustom('seq') for 'type seq = Cons of int * seq | Nil of unit *)
-
-(* TODO: Associate some sort of ID with them so can't confuse reused names:
-
+(* loc kept so can't confuse reused names:
 let type seq = ... in
   let f x =
     let type seq = ... in
       ....
   in /// Can't tell which seq used here ///
-
 *)
 
 type formals = (var * type_expr) list
