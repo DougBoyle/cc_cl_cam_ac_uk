@@ -43,7 +43,8 @@ and value =
      | PAIR of value * value 
      | INL of value 
      | INR of value 
-     | FUN of ((value * store) -> (value * store)) 
+     | FUN of ((value * store) -> (value * store))
+     | TAGGED of string * value
 
 type env = var -> value 
 
@@ -61,7 +62,8 @@ let rec string_of_value = function
      | PAIR(v1, v2) -> "(" ^ (string_of_value v1) ^ ", " ^ (string_of_value v2) ^ ")"
      | INL v -> "inl(" ^ (string_of_value v) ^ ")"
      | INR  v -> "inr(" ^ (string_of_value v) ^ ")"
-     | FUN _ -> "FUNCTION( ... )" 
+     | FUN _ -> "FUNCTION( ... )"
+     | TAGGED (t, v) -> t ^ "(" ^ (string_of_value v) ^ ")"
     
 (* update : (env * binding) -> env 
    update : (store * (address * value)) -> store
@@ -170,7 +172,8 @@ let rec interpret (e, env, store) =
     | LetRecFun(f, (x, body), e) -> 
        let rec new_env g = (* a recursive environment! *) 
            if g = f then FUN (fun (v, s) -> interpret(body, update(new_env, (x, v)), s)) else env g
-       in interpret(e, new_env, store) 
+       in interpret(e, new_env, store)
+    | Tagged (tag, e) -> let (v, s) = interpret(e, env, store) in (TAGGED(tag, v), s)
 
 (* env_empty : env *) 
 let empty_env = fun x -> complain (x ^ " is not defined!\n")

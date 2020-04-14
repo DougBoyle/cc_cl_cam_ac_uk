@@ -31,6 +31,8 @@ type expr =
        | LetFun of var * lambda * expr
        | LetRecFun of var * lambda * expr
 
+       | Tagged of string * expr
+
 and lambda = Past.var * expr 
 
 (* printing *) 

@@ -13,6 +13,7 @@ and value =
      | INL of value 
      | INR of value 
      | FUN of ((value * store) -> (value * store))
+     | TAGGED of string * value
 
 type env = Ast.var -> value 
 

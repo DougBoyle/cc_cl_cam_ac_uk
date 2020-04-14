@@ -13,7 +13,7 @@ type type_expr =
    | TEarrow of type_expr * type_expr
    | TEproduct of type_expr * type_expr
    | TEunion of type_expr * type_expr
-   | TEcustom of string
+   | TEcustom of string * loc
 
 type oper = ADD | MUL | DIV | SUB | LT | AND | OR | EQ | EQB | EQI
 
@@ -47,7 +47,7 @@ type expr =
        | LetFun of loc * var * lambda * type_expr * expr
        | LetRecFun of loc * var * lambda * type_expr * expr
 
-        | Decl of loc * string * (string * type_expr) list
+        | Decl of loc * string * (string * type_expr) list * expr
 
 and lambda = var * type_expr * expr 
 val loc_of_expr : expr -> loc 

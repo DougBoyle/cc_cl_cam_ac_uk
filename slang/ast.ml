@@ -29,6 +29,8 @@ type expr =
        | LetFun of var * lambda * expr
        | LetRecFun of var * lambda * expr
 
+       | Tagged of string * expr
+
 and lambda = var * expr 
 
 
@@ -99,6 +101,8 @@ let rec pp_expr ppf = function
     | LetRecFun(f, (x, e1), e2)  -> 
          fprintf ppf "@[letrec %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
+    | Tagged(s, e) -> fprintf ppf "%a(%a)" fstring s pp_expr e
+
 and pp_expr_list ppf = function 
   | [] -> () 
   | [e] -> pp_expr ppf e 
@@ -169,6 +173,8 @@ let rec string_of_expr = function
               string_of_expr e; 
 	      mk_con "" [x1; string_of_expr e1]; 
 	      mk_con "" [x2; string_of_expr e2]]
+
+	  | Tagged (s, e) -> mk_con s [string_of_expr e]
 
 and string_of_expr_list = function 
   | [] -> "" 

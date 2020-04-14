@@ -2,7 +2,7 @@ open Past
 
 let complain = Errors.complain
 
-let internal_error msg = complain ("INTERNAL ERROR: " ^ msg) 
+let internal_error msg = complain ("INTERNAL ERROR: " ^ msg)
 
 let report_expecting e msg t = 
     let loc = loc_of_expr e in 
@@ -37,8 +37,7 @@ let rec find loc x = function
   | [] -> complain (x ^ " is not defined at " ^ (string_of_loc loc)) 
   | (y, v) :: rest -> if x = y then v else find loc x rest
 
-(* may want to make this more interesting someday ... *) 
-let rec match_types (t1, t2) = (t1 = t2) 
+let rec match_types (t1, t2) = (t1 = t2)
 
 let make_pair loc (e1, t1) (e2, t2)  = (Pair(loc, e1, e2), TEproduct(t1, t2))
 let make_inl loc t2 (e, t1)          = (Inl(loc, t2, e), TEunion(t1, t2))
@@ -55,7 +54,9 @@ let make_let loc x t (e1, t1) (e2, t2)  =
 
 let make_if loc (e1, t1) (e2, t2) (e3, t3) = 
      match t1 with 
-     | TEbool -> 
+     | TEbool ->
+          let _ = Printf.printf "%s\n" (string_of_type t2) in
+          let _ = Printf.printf "%s\n" (string_of_type t3) in
           if match_types (t2, t3) 
           then (If(loc, e1, e2, e3), t2) 
           else report_type_mismatch (e2, t2) (e3, t3) 
@@ -147,12 +148,12 @@ let make_case loc left right x1 x2 (e1, t1) (e2, t2) (e3, t3) =
 
 (* Verifies that type used is actually defined at that point *)
 let rec valid_type loc decls = function
-  | TEcustom s -> let _ = find loc s decls in true
-  | TEref t -> valid_type loc decls t
-  | TEarrow (t1, t2) -> valid_type loc decls t1 && valid_type loc decls t2
-  | TEproduct (t1, t2) -> valid_type loc decls t1 && valid_type loc decls t2
-  | TEunion (t1, t2) -> valid_type loc decls t1 && valid_type loc decls t2
-  | _ -> true
+  | TEcustom (s,_) -> TEcustom (s, find loc s decls)
+  | TEref t -> TEref (valid_type loc decls t)
+  | TEarrow (t1, t2) -> TEarrow (valid_type loc decls t1, valid_type loc decls t2)
+  | TEproduct (t1, t2) -> TEproduct (valid_type loc decls t1, valid_type loc decls t2)
+  | TEunion (t1, t2) -> TEunion (valid_type loc decls t1, valid_type loc decls t2)
+  | t -> t
 
 let rec infer env decls e =
     match e with 
@@ -172,40 +173,41 @@ let rec infer env decls e =
     | Pair(loc, e1, e2)    -> make_pair loc (infer env decls e1) (infer env decls e2)
     | Fst(loc, e)          -> make_fst loc (infer env decls e)
     | Snd (loc, e)         -> make_snd loc (infer env decls e)
-    | Inl (loc, t, e)      -> let _ = valid_type loc decls t in
-      make_inl loc t (infer env decls e)
-    | Inr (loc, t, e)      -> let _ = valid_type loc decls t in
-      make_inr loc t (infer env decls e)
+    | Inl (loc, t, e)      -> let t' = valid_type loc decls t in
+      make_inl loc t' (infer env decls e)
+    | Inr (loc, t, e)      -> let t' = valid_type loc decls t in
+      make_inr loc t' (infer env decls e)
     | Case(loc, e, (x1, t1, e1), (x2, t2, e2)) ->
-      let _ = valid_type loc decls t1 && valid_type loc decls t2 in
-            make_case loc t1 t2 x1 x2 (infer env decls e) (infer ((x1, t1) :: env) decls e1)
-                                                          (infer ((x2, t2) :: env) decls e2)
-    | Lambda (loc, (x, t, e)) -> let _ = valid_type loc decls t in
-      make_lambda loc x t (infer ((x, t) :: env) decls e)
+      let t1' = valid_type loc decls t1 in let t2' = valid_type loc decls t2 in
+            make_case loc t1' t2' x1 x2 (infer env decls e) (infer ((x1, t1') :: env) decls e1)
+                                                          (infer ((x2, t2') :: env) decls e2)
+    | Lambda (loc, (x, t, e)) -> let t' = valid_type loc decls t in
+      make_lambda loc x t' (infer ((x, t') :: env) decls e)
     | App(loc, e1, e2)        -> make_app loc (infer env decls e1) (infer env decls e2)
-    | Let(loc, x, t, e1, e2)  -> let _ = valid_type loc decls t in
-      make_let loc x t (infer env decls e1) (infer ((x, t) :: env) decls e2)
-    | LetFun(loc, f, (x, t1, body), t2, e) -> let _ = valid_type loc decls t1 && valid_type loc decls t2 in
-      let env1 = (f, TEarrow(t1, t2)) :: env in 
+    | Let(loc, x, t, e1, e2)  -> let t' = valid_type loc decls t in
+      make_let loc x t' (infer env decls e1) (infer ((x, t') :: env) decls e2)
+    | LetFun(loc, f, (x, t1, body), t2, e) -> let t1' = valid_type loc decls t1 in
+      let t2' = valid_type loc decls t2 in
+      let env1 = (f, TEarrow(t1', t2')) :: env in
       let p = infer env1 decls e  in
-      let env2 = (x, t1) :: env in 
-         (try make_letfun loc f x t1 (infer env2 decls body) p
-          with _ -> let env3 = (f, TEarrow(t1, t2)) :: env2 in 
-                        make_letrecfun loc f x t1 (infer env3 decls body) p
+      let env2 = (x, t1') :: env in
+         (try let (bdy, bdy_t) = infer env2 decls body in
+          if match_types (bdy_t, t2) then make_letfun loc f x t1' (bdy, bdy_t) p
+          else report_types_not_equal loc bdy_t t2
+          with _ -> let env3 = (f, TEarrow(t1', t2')) :: env2 in
+                    let (bdy, bdy_t) = infer env3 decls body in
+                    if match_types (bdy_t, t2) then make_letrecfun loc f x t1' (bdy, bdy_t) p
+                    else report_types_not_equal loc bdy_t t2
          )
     | LetRecFun(_, _, _, _, _)  -> internal_error "LetRecFun found in parsed AST"
-    | Decl(_, _, _) -> internal_error "Datatype declaration found outside top level"
+    | Decl(loc, x, l, e) -> let decls' = (x,loc)::decls in (* loc tracks which datatype declaration for dup names *)
+    let env' = (List.map (fun (y, t) -> (y, TEarrow (valid_type loc decls' t, TEcustom(x, loc)))) l ) @ env in
+    let (e', t) = infer env' decls' e in (Decl(loc, x, l, e'), t)
 
 and infer_seq loc env decls el =
     let rec aux decls carry = function
       | []        -> internal_error "empty sequence found in parsed AST"
-      | [Decl(lo, x, l)] -> let decls' = (x,l)::decls in
-        let _ = List.map (fun (x, t) -> valid_type loc decls' t) l in
-       (Seq(loc, List.rev (Decl(lo, x, l) :: carry )), TEunit)
       | [e]       -> let (e', t) = infer env decls e in (Seq(loc, List.rev (e' :: carry )), t)
-      | Decl(lo, x, l)::rest -> let decls' = (x,l)::decls in
-        let _ = List.map (fun (x, t) -> valid_type loc decls' t) l in
-        aux decls' (Decl(lo,x,l)::carry) rest
       | e :: rest -> let (e', _) = infer env decls e in aux decls (e' :: carry) rest
     in aux decls [] el
        

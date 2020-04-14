@@ -37,23 +37,13 @@ let get_loc = Parsing.symbol_start_pos
 /* Grammar  */
 
 start: 
-| toplevel EOF { Past.Seq(get_loc(), $1) }
+| expr EOF { $1 }
 
 /* problem 
    -e  (unary minus) 
     e e (application) 
     e1 - e2  (is the e1(-e2) or e1-e2???) 
 */
-
-/* TODO: Always making top level a Seq is inefficient */
-toplevel:
-| decl { [$1] }
-| expr { [$1] }
-| decl SEMICOLON toplevel { $1 :: $3 }
-| expr SEMICOLON toplevel { $1 :: $3 }
-
-decl:
-| TYPEDECL IDENT EQUAL decloptions { Past.Decl(get_loc(), $2, $4) }
 
 simple_expr:
 | UNIT                               { Past.Unit (get_loc())}
@@ -98,6 +88,8 @@ expr:
   BAR INR LPAREN IDENT COLON texpr RPAREN  ARROW expr 
   END 
                                      { Past.Case (get_loc(), $2, ($6, $8, $11), ($15, $17, $20)) }
+/* TODO: Allow as 'type = ...; rest of program' */
+| LET TYPEDECL IDENT EQUAL decloptions IN expr END { Past.Decl(get_loc(), $3, $5, $7) }
 /* | MATCH expr WITH matchlist END*/
 
 
@@ -126,7 +118,7 @@ matchlist:
 */
 
 texpr:
-| IDENT                              { Past.TEcustom($1) }
+| IDENT                              { Past.TEcustom($1, get_loc()) }
 | BOOL                               { Past.TEbool  }
 | INTTYPE                            { Past.TEint  }
 | UNITTYPE                           { Past.TEunit  }

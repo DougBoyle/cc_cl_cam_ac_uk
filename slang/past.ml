@@ -15,7 +15,18 @@ type type_expr =
    | TEarrow of type_expr * type_expr
    | TEproduct of type_expr * type_expr
    | TEunion of type_expr * type_expr
-   | TEcustom of string (* e.g. TEcustom('seq') for 'type seq = Cons of int * seq | Nil of unit *)
+   | TEcustom of string * loc
+   (* e.g. TEcustom('seq') for 'type seq = Cons of int * seq | Nil of unit *)
+
+(* TODO: Associate some sort of ID with them so can't confuse reused names:
+
+let type seq = ... in
+  let f x =
+    let type seq = ... in
+      ....
+  in /// Can't tell which seq used here ///
+
+*)
 
 type formals = (var * type_expr) list
 
@@ -51,7 +62,7 @@ type expr =
        | LetFun of loc * var * lambda * type_expr * expr
        | LetRecFun of loc * var * lambda * type_expr * expr
 
-       | Decl of loc * string * (string * type_expr) list
+       | Decl of loc * string * (string * type_expr) list * expr
 
 and lambda = var * type_expr * expr 
 
@@ -80,7 +91,7 @@ let  loc_of_expr = function
     | Let(loc, _, _, _, _)          -> loc 
     | LetFun(loc, _, _, _, _)       -> loc 
     | LetRecFun(loc, _, _, _, _)    -> loc
-    | Decl (loc, _, _)              -> loc
+    | Decl (loc, _, _, _)              -> loc
 
 
 let string_of_loc loc = 
@@ -103,7 +114,7 @@ let rec pp_type = function
   | TEarrow(t1, t2)   -> "(" ^ (pp_type t1) ^ " -> " ^ (pp_type t2) ^ ")" 
   | TEproduct(t1, t2) -> "(" ^ (pp_type t1) ^ " * " ^ (pp_type t2) ^ ")"  
   | TEunion(t1, t2)   -> "(" ^ (pp_type t1) ^ " + " ^ (pp_type t2) ^ ")"
-  | TEcustom s -> s
+  | TEcustom (s, _) -> s
 
 let pp_uop = function 
   | NEG -> "-" 
@@ -173,7 +184,8 @@ let rec pp_expr ppf = function
     | LetRecFun(_, f, (x, t1, e1), t2, e2)     -> 
          fprintf ppf "@[letrec %a(%a : %a) : %a =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_type t1 pp_type t2 pp_expr e1 pp_expr e2
-    | Decl(_, t, l) -> fprintf ppf "datatype %a =@ %a" fstring t pp_lambda_list l
+    | Decl(_, t, l, e) -> fprintf ppf "@[let type %a =@ %a @ in %a @ end@]"
+                     fstring t pp_lambda_list l pp_expr e
 
 let print_expr e = 
     let _ = pp_expr std_formatter e
@@ -217,7 +229,7 @@ let rec string_of_type = function
   | TEarrow(t1, t2)   -> mk_con "TEarrow" [string_of_type t1; string_of_type t2] 
   | TEproduct(t1, t2) -> mk_con "TEproduct" [string_of_type t1; string_of_type t2] 
   | TEunion(t1, t2)   -> mk_con "TEunion" [string_of_type t1; string_of_type t2]
-  | TEcustom s -> s
+  | TEcustom (s, l) -> mk_con s [string_of_loc l]
 
 let rec string_of_expr = function 
     | Unit _              -> "Unit" 
@@ -258,8 +270,8 @@ let rec string_of_expr = function
 	     string_of_expr e; 
 	     mk_con "" [x1; string_of_type t1; string_of_expr e1]; 
 	     mk_con "" [x2; string_of_type t1; string_of_expr e2]]
-	  | Decl(_, x, l) ->
-	     mk_con "" [x; string_of_lambda_list l]
+	  | Decl(_, x, l, e) ->
+	     mk_con "" [x; string_of_lambda_list l; string_of_expr e]
 
 and string_of_expr_list = function 
   | [] -> "" 
