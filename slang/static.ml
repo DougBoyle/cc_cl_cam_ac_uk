@@ -153,6 +153,12 @@ let rec valid_type loc decls = function
   | TEunion (t1, t2) -> TEunion (valid_type loc decls t1, valid_type loc decls t2)
   | t -> t
 
+let rec match_type_list loc = function
+  | [(e,t)] -> t
+  | (e,t)::ts -> let t1 = match_type_list loc ts in
+    if match_types (t, t1) then t else report_types_not_equal loc t t1
+  | _ -> complain "Empty match statement"
+
 let rec infer env decls e =
     match e with 
     | Unit _               -> (e, TEunit)
@@ -199,8 +205,16 @@ let rec infer env decls e =
          )
     | LetRecFun(_, _, _, _, _)  -> internal_error "LetRecFun found in parsed AST"
     | Decl(loc, x, l, e) -> let decls' = (x,loc)::decls in (* loc tracks which datatype declaration for dup names *)
-    let env' = (List.map (fun (y, t) -> (y, TEarrow (valid_type loc decls' t, TEcustom(x, loc)))) l ) @ env in
-    let (e', t) = infer env' decls' e in (Decl(loc, x, l, e'), t)
+      let env' = (List.map (fun (y, t) -> (y, TEarrow (valid_type loc decls' t, TEcustom(x, loc)))) l ) @ env in
+      let (e', t) = infer env' decls' e in (Decl(loc, x, l, e'), t)
+    | Match(loc, e, l) -> let (e', t) = infer env decls e in
+     let ts = List.map (fun (s,x,e) -> let t1 = find loc s env in
+         match t1 with TEarrow(t1', t2) -> if match_types (t, t2) then
+                      let (e',t') = infer ((x,t1')::env) decls e in ((s,x,e'), t')
+                        else report_types_not_equal loc t t2
+                    | _ -> complain "Match expression only allowed on datatype instances" ) l in
+         let t = match_type_list loc ts in (Match(loc, e, List.map (fun (a,b) -> a) ts), t)
+
 
 and infer_seq loc env decls el =
     let rec aux decls carry = function

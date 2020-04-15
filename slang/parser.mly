@@ -90,7 +90,8 @@ expr:
                                      { Past.Case (get_loc(), $2, ($6, $8, $11), ($15, $17, $20)) }
 /* TODO: Allow as 'type = ...; rest of program' */
 | LET TYPEDECL IDENT EQUAL decloptions IN expr END { Past.Decl(get_loc(), $3, $5, $7) }
-/* | MATCH expr WITH matchlist END*/
+| MATCH expr WITH matchlist END { Past.Match(get_loc(), $2, $4) }
+| MATCH expr WITH BAR matchlist END { Past.Match(get_loc(), $2, $5) }
 
 
 exprlist:
@@ -111,11 +112,11 @@ decloptions:
    | Nil(y) -> e2
 
 */
-/*
+
 matchlist:
-| BAR IDENT LPAREN IDENT RPAREN ARROW expr { [($2, $4, $7)] }
-| BAR IDENT LPAREN IDENT RPAREN ARROW expr matchlist { ($2, $4, $7)::$8 }
-*/
+| IDENT LPAREN IDENT RPAREN ARROW expr { [($1, $3, $6)] }
+| IDENT LPAREN IDENT RPAREN ARROW expr BAR matchlist { ($1, $3, $6)::$8 }
+
 
 texpr:
 | IDENT                              { Past.TEcustom($1, get_loc()) }

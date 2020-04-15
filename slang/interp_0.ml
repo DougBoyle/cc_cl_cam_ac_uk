@@ -104,6 +104,10 @@ let do_ref = function
 let do_assign a = function 
   | (v, store) -> (UNIT, update(store, (a, v)))
 
+let rec find x = function
+  | [] -> complain "Runtime error. No match found"
+  | (s,y,e)::rest -> if s = x then (y,e) else find x rest
+
 (*
     interpret : (expr * env * store) -> (value * store) 
               : (expr * (var -> value) * address -> value) -> value
@@ -174,6 +178,10 @@ let rec interpret (e, env, store) =
            if g = f then FUN (fun (v, s) -> interpret(body, update(new_env, (x, v)), s)) else env g
        in interpret(e, new_env, store)
     | Tagged (tag, e) -> let (v, s) = interpret(e, env, store) in (TAGGED(tag, v), s)
+    | Match (e, l) -> let (v, s) = interpret(e, env, store) in (match v with
+      | TAGGED (tag, v') -> let (x, e) = find tag l in interpret(e, update(env, (x,v')), s)
+      | _ -> complain "Runtime error, match statement must be a datatype instance")
+
 
 (* env_empty : env *) 
 let empty_env = fun x -> complain (x ^ " is not defined!\n")

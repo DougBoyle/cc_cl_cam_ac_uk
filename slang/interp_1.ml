@@ -39,9 +39,9 @@ and continuation_action =
   | OPER_FST of Ast.expr * env * Ast.oper 
   | ASSIGN of value
   | ASSIGN_FST of Ast.expr * env
-  | TAIL of Ast.expr list * env
+  | TAIL of expr list * env
   | IF of expr * expr * env 
-  | WHILE of Ast.expr * Ast.expr * env
+  | WHILE of expr * expr * env
   | MKPAIR of value 
   | PAIR_FST of expr * env 
   | FST
@@ -54,6 +54,7 @@ and continuation_action =
   | APPLY of value 
   | ARG of expr * env
   | MKTAG of string
+  | MATCH of (string * var * expr) list * env
 
 and continuation = continuation_action  list
 
@@ -191,6 +192,7 @@ let string_of_continuation_action = function
   | MKREF -> "MKREF" 
   | DEREF -> "DEREF"
   | MKTAG s -> "MKTAG " ^ s
+  | MATCH (l,env) -> "MATCH(" ^ (Ast.string_of_match_list l) ^ ", " ^ (string_of_env env) ^ ")"
 
 let string_of_continuation = string_of_list ";\n " string_of_continuation_action
 
@@ -236,6 +238,7 @@ let step = function
  | EXAMINE(Seq (e :: rest),             env, k) -> EXAMINE(e, env, TAIL (rest, env) :: k) 
  | EXAMINE(While(e1, e2),               env, k) -> EXAMINE(e1, env, WHILE(e1, e2, env) :: k)
  | EXAMINE(Tagged(s, e),                env, k) -> EXAMINE(e, env, MKTAG(s) :: k)
+ | EXAMINE(Match(e, l),                 env, k) -> EXAMINE(e, env, MATCH(l, env)::k)
  (* EXAMINE --> COMPUTE *) 
  | EXAMINE(Unit,              _, k) -> COMPUTE(k, UNIT) 
  | EXAMINE(Var x,           env, k) -> COMPUTE(k, lookup (env, x))
@@ -269,6 +272,9 @@ let step = function
  | COMPUTE(ASSIGN_FST (e2, env) :: k,            v)  -> EXAMINE(e2, env, ASSIGN v :: k)
  | COMPUTE(WHILE (e1, e2, env) :: k,     BOOL true)  -> EXAMINE(Seq [e2; e1], env, WHILE(e1, e2, env)::k)
  | COMPUTE((TAIL (el, env)) :: k,     _)  ->  EXAMINE(Seq el, env, k)
+ | COMPUTE((MATCH((s,x,e)::rest, env))::k, TAGGED(tag,v)) -> if tag = s then
+    EXAMINE(e, update(env, (x, v)), k) else COMPUTE((MATCH(rest, env))::k, TAGGED(tag,v))
+ | COMPUTE((MATCH([], env))::rest, _) -> complain "No match found\n"
  | state -> complain ("step : malformed state = " ^ (string_of_state state) ^ "\n")
 
 let rec driver n state = 

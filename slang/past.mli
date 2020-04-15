@@ -47,7 +47,8 @@ type expr =
        | LetFun of loc * var * lambda * type_expr * expr
        | LetRecFun of loc * var * lambda * type_expr * expr
 
-        | Decl of loc * string * (string * type_expr) list * expr
+       | Decl of loc * string * (string * type_expr) list * expr
+       | Match of loc * expr * (string * var * expr) list
 
 and lambda = var * type_expr * expr 
 val loc_of_expr : expr -> loc 

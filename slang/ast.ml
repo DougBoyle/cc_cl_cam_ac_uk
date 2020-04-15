@@ -30,6 +30,7 @@ type expr =
        | LetRecFun of var * lambda * expr
 
        | Tagged of string * expr
+       | Match of expr * (string * var * expr) list
 
 and lambda = var * expr 
 
@@ -102,6 +103,12 @@ let rec pp_expr ppf = function
          fprintf ppf "@[letrec %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
     | Tagged(s, e) -> fprintf ppf "%a(%a)" fstring s pp_expr e
+    | Match(e, l) -> fprintf ppf "match %a with %a end" pp_expr e pp_match_list l
+
+and pp_match_list ppf = function
+  | [] -> ()
+  | [(s,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring s fstring x pp_expr e
+  | (s,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a" fstring s fstring x pp_expr e pp_match_list rest
 
 and pp_expr_list ppf = function 
   | [] -> () 
@@ -175,9 +182,15 @@ let rec string_of_expr = function
 	      mk_con "" [x2; string_of_expr e2]]
 
 	  | Tagged (s, e) -> mk_con s [string_of_expr e]
+	  | Match(e, l) -> mk_con "" [string_of_expr e; string_of_match_list l]
 
 and string_of_expr_list = function 
   | [] -> "" 
   | [e] -> string_of_expr e 
   |  e:: rest -> (string_of_expr e ) ^ "; " ^ (string_of_expr_list rest)
+
+and string_of_match_list = function
+  | [] -> ""
+  | [(s,x,e)] -> s ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
+  | (s,x,e)::rest -> s ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)
 

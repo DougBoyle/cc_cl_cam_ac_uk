@@ -66,6 +66,7 @@ let rec translate_expr = function
 
     | Past.Decl(_, x, l, e) -> List.fold_right
       (fun (x,t) -> fun e -> Ast.LetFun(x, ("e", Ast.Tagged(x, Ast.Var("e"))), e)) l (translate_expr e)
+    | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (s,x,e) -> (s,x,translate_expr e)) l)
 
 and translate_lambda (x, _, body) = (x, translate_expr body) 
 

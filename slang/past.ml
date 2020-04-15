@@ -59,6 +59,7 @@ type expr =
        | LetRecFun of loc * var * lambda * type_expr * expr
 
        | Decl of loc * string * (string * type_expr) list * expr
+       | Match of loc * expr * (string * var * expr) list
 
 and lambda = var * type_expr * expr 
 
@@ -88,6 +89,7 @@ let  loc_of_expr = function
     | LetFun(loc, _, _, _, _)       -> loc 
     | LetRecFun(loc, _, _, _, _)    -> loc
     | Decl (loc, _, _, _)              -> loc
+    | Match (loc, _, _)                -> loc
 
 
 let string_of_loc loc = 
@@ -182,6 +184,12 @@ let rec pp_expr ppf = function
                      fstring f fstring x  pp_type t1 pp_type t2 pp_expr e1 pp_expr e2
     | Decl(_, t, l, e) -> fprintf ppf "@[let type %a =@ %a @ in %a @ end@]"
                      fstring t pp_lambda_list l pp_expr e
+    | Match(_, e, l) -> fprintf ppf "match %a with %a end" pp_expr e pp_match_list l
+
+and pp_match_list ppf = function
+  | [] -> ()
+  | [(s,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring s fstring x pp_expr e
+  | (s,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a" fstring s fstring x pp_expr e pp_match_list rest
 
 let print_expr e = 
     let _ = pp_expr std_formatter e
@@ -268,6 +276,7 @@ let rec string_of_expr = function
 	     mk_con "" [x2; string_of_type t1; string_of_expr e2]]
 	  | Decl(_, x, l, e) ->
 	     mk_con "" [x; string_of_lambda_list l; string_of_expr e]
+	  | Match(_, e, l) -> mk_con "" [string_of_expr e; string_of_match_list l]
 
 and string_of_expr_list = function 
   | [] -> "" 
@@ -278,3 +287,8 @@ and string_of_lambda_list = function
   | [] -> ""
   | [(x,t)] -> x ^ " of " ^ (string_of_type t)
   | (x,t)::rest -> x ^ " of " ^ (string_of_type t) ^ " | " ^ (string_of_lambda_list rest)
+
+and string_of_match_list = function
+  | [] -> ""
+  | [(s,x,e)] -> s ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
+  | (s,x,e)::rest -> s ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)

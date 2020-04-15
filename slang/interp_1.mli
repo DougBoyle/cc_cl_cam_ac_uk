@@ -36,6 +36,7 @@ and continuation_action =
   | APPLY of value 
   | ARG of Ast.expr * env
   | MKTAG of string
+  | MATCH of (string * Ast.var * Ast.expr) list * env
 
 and continuation = continuation_action  list
 
