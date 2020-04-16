@@ -64,6 +64,7 @@ and instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | TEST_TAG of int
   | MATCH_FAIL
 
 and code = instruction list 
@@ -164,6 +165,7 @@ and string_of_instruction = function
  | MK_CLOSURE loc  -> "MK_CLOSURE(" ^ (string_of_location loc) ^ ")"
  | MK_REC (v, loc) -> "MK_REC(" ^ v ^ ", " ^ (string_of_location loc) ^ ")"
  | MKTAG i -> "MKTAG " ^ (Static.resolve_name i)
+ | TEST_TAG i -> "TEST_TAG(" ^  (Static.resolve_name i) ^ ")"
  | MATCH_FAIL -> "MATCH_FAIL"
 
 and string_of_code c = string_of_list "\n " string_of_instruction c 
@@ -265,6 +267,7 @@ let step (cp, evs) =
  | (HALT,                              evs) -> (cp, evs) 
  | (GOTO (_, Some i),                  evs) -> (i, evs)
  | (MKTAG tag,                (V v) :: evs) -> (cp + 1, V(TAGGED(tag, v))::evs)
+ | (TEST_TAG i, ((V (TAGGED (j, v)))::evs as stack)) -> (cp+1, V(BOOL (i = j))::(V v)::stack)
  | (MATCH_FAIL, _) -> complain "No match found\n"
  | _ -> complain ("step : bad state = " ^ (string_of_state (cp, evs)) ^ "\n")
 
@@ -382,6 +385,16 @@ let rec comp = function
                           (def @ defs1 @ defs2, 
                            [MK_REC(f, (lab, None)); BIND f] @ c2 @ [SWAP; POP])
  | Tagged (s, e) -> let (defs, c) = comp e in (defs, c @ [MKTAG s])
+ | Match(e, l) -> let (defs, c) = comp e in
+   let l1 = new_label() in
+   let (defs1, c1) = (List.fold_right (fun (i, x, e) -> fun (d,c) ->
+                      let l2 = new_label() in
+                      let (d1, c1) = comp e in
+                          (d1 @ d, [TEST_TAG i; TEST (l2, None); SWAP; POP; BIND x] @ c1 @
+                                   [SWAP; POP; GOTO (l1, None); LABEL l2; POP] @ c) )
+                           l ([], [MATCH_FAIL; LABEL l1]))
+                      in (defs @ defs1, c @ c1)
+
 let compile e = 
     let (defs, c) = comp e in 
     let result = c @               (* body of program *) 

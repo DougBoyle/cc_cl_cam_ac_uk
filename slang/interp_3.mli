@@ -43,6 +43,7 @@ and instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | TEST_TAG of int
   | MATCH_FAIL
 
 and code = instruction list 

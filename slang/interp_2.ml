@@ -334,7 +334,7 @@ let rec compile = function
        (compile e) @ leave_scope
  | Tagged (i, e) -> (compile e) @ [MKTAG i]
  | Match(e, l) -> (compile e) @
-   (* SWAP POP removes TAGGED(i,v) from stack once match found *)
+   (* SWAP POP removes TAGGED(i,v) from stack once match found, later removes bound x *)
    (List.fold_right (fun (i, x, e) -> fun c ->
     [TEST_TAG i; TEST ([SWAP; POP; BIND x] @ (compile e) @ [SWAP; POP], POP :: c)])
      l [MATCH_FAIL])
