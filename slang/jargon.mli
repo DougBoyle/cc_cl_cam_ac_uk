@@ -29,7 +29,7 @@ type heap_type =
     | HT_INL 
     | HT_INR 
     | HT_CLOSURE
-    | HT_TAG of int
+    | HT_TAG
 
 type heap_item = 
   | HEAP_INT of int 
@@ -68,6 +68,8 @@ type instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | GET of int
+  | MATCH_FAIL
 
 
 type vm_state = 

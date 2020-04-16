@@ -29,7 +29,9 @@ let free_vars(bvars, exp) =
     | Assign(e1, e2)     -> aux bound (aux bound free e1) e2
     | While(e1, e2)      -> aux bound (aux bound free e1) e2
     | Seq []             -> free 
-    | Seq (e :: rest)    -> aux bound (aux bound free e) (Seq rest) 
+    | Seq (e :: rest)    -> aux bound (aux bound free e) (Seq rest)
+    | Tagged (_, e)      -> aux bound free e
+    | Match (e, l) ->    List.fold_right (fun (i, x, e) -> fun free -> aux (x :: bound) free e) l (aux bound free e)
     | _                  -> free 
     and lambda bound free (x, e) = aux (x :: bound) free e 
    in aux bvars [] exp 

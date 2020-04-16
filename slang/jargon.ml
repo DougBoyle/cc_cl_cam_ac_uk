@@ -32,7 +32,7 @@ type heap_type =
   | HT_INL 
   | HT_INR 
   | HT_CLOSURE
-  | HT_TAG of int (* For x86, will need to make table of strings then use pointers to table *)
+  | HT_TAG
 
 type heap_item = 
   | HEAP_INT of int 
@@ -72,6 +72,8 @@ type instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | GET of int (* Heap lookup but using value on top of stack, doesn't remove object used *)
+  | MATCH_FAIL
 
 type listing = instruction list 
 
@@ -125,7 +127,7 @@ let string_of_heap_type = function
     | HT_INL     -> "HT_INL"
     | HT_INR     -> "HT_INR"
     | HT_CLOSURE -> "HT_CLOSURE"
-    | HT_TAG i   -> "HT_TAG " ^ (Static.resolve_name i)
+    | HT_TAG   -> "HT_TAG"
 
 
 let string_of_heap_item = function 
@@ -171,7 +173,9 @@ let string_of_instruction = function
  | MK_CLOSURE (loc, n)  
              -> "MK_CLOSURE(" ^ (string_of_location loc) 
 	                      ^ ", " ^ (string_of_int n) ^ ")"
- | MKTAG i  -> "MKTAG " ^ (Static.resolve_name i)
+ | MKTAG i  -> "MKTAG " ^ (Static.resolve_name i) ^ "_" ^ (string_of_int i)
+ | GET i -> "GET " ^ (string_of_int i)
+ | MATCH_FAIL -> "MATCH_FAIL"
 
 let rec string_of_listing = function 
   | [] -> "\n"  
@@ -228,8 +232,10 @@ let rec string_of_heap_value a vm =
     | HT_INL -> "inl(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_INR -> "inr(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_CLOSURE -> "CLOSURE"
-    | HT_TAG i -> (Static.resolve_name i) ^ "(" ^ (string_of_heap_value (a+1) vm) ^ ")"
-    )
+    | HT_TAG -> (match vm.heap.(a+1) with
+      | HEAP_INT i -> (Static.resolve_name i) ^ "_" ^ (string_of_int i) ^ "(" ^ (string_of_heap_value (a+2) vm) ^ ")"
+      | _ -> Errors.complain "Heap tagged object found with invalid tag"
+    ))
 
 let string_of_value vm = 
     match stack_top vm with 
@@ -479,12 +485,19 @@ let apply vm =
         | _ -> Errors.complain "apply: runtime error, expecting code index in heap") 
     | _ -> Errors.complain "apply: runtime error, expecting heap index on top of stack" 
 
-let mk_tag vm s =
+let mk_tag vm i =
   let (v, vm1) = pop_top vm in
-  let (a, vm2) = allocate(2, vm1) in
-  let _ = Array.set vm2.heap a (HEAP_HEADER (2, HT_TAG s)) in
-  let _ = Array.set vm2.heap (a+1) (stack_to_heap_item v) in
+  let (a, vm2) = allocate(3, vm1) in
+  let _ = Array.set vm2.heap a (HEAP_HEADER (3, HT_TAG)) in
+  let _ = Array.set vm2.heap (a+1) (HEAP_INT i) in
+  let _ = Array.set vm2.heap (a+2) (stack_to_heap_item v) in
       push(STACK_HI a, vm2)
+
+let get vm i =
+  match stack_top vm with
+  | STACK_HI a -> let v = vm.heap.(a+i) in push(heap_to_stack_item v, vm)
+  | _ -> Errors.complain "Value on stack is not a pointer to a tagged object"
+
 
 let step vm = 
  match get_instruction vm with 
@@ -512,7 +525,9 @@ let step vm =
   | GOTO (_, Some i)  -> goto(i, vm) 
   | TEST (_, Some i)  -> test(i, vm) 
   | CASE (_, Some i)  -> case(i, vm)
-  | MKTAG s           -> advance_cp (mk_tag vm s)
+  | MKTAG i           -> advance_cp (mk_tag vm i)
+  | GET i             -> advance_cp (get vm i)
+  | MATCH_FAIL -> Errors.complain "No match found\n"
 
   | _ -> Errors.complain ("step : bad state = " ^ (string_of_state vm) ^ "\n")
 
@@ -702,7 +717,16 @@ let rec comp vmap = function
                       let (defs1, c1) = comp vmap (Lambda(f, e2)) in  
                       let (defs2, c2) = comp_lambda vmap (Some f, x, e1) in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
- | Tagged(s, e) -> let (defs, c) = comp vmap e in (defs, c @ [MKTAG s])
+ | Tagged(i, e) -> let (defs, c) = comp vmap e in (defs, c @ [MKTAG i])
+ | Match(e, l) -> let (defs, c) = comp vmap e in
+     let l1 = new_label() in
+    let (defs1, c1) = (List.fold_right (fun (i, x, e) -> fun (d,c) ->
+                       let l2 = new_label() in
+                       let (d1, c1) = comp_lambda vmap (None, x, e) in                         (* Tagged(i,v) on top -> v *)
+                           (d1 @ d, [GET 1; PUSH (STACK_INT i); OPER EQI; TEST (l2, None); GET 2; SWAP; POP] @ c1 @
+                                    [APPLY; GOTO (l1, None); LABEL l2] @ c))
+                            l ([], [MATCH_FAIL; LABEL l1]))
+                       in (defs @ defs1, c @ c1)
 
 and comp_lambda vmap (f_opt, x, e) = 
     let bound_vars = match f_opt with | None -> [x]          | Some f -> [x; f] in 
