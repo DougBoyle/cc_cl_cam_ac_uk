@@ -33,7 +33,10 @@ let check (file, e) =
     in let _ = peek "After static checks" e' Past.string_of_expr 
     in e' 
 
-(* translate from Past.expr to Ast.expr *) 
+(* translate from Past.expr to Ast.expr *)
+(* TODO: Make use of tab - global index to string symbol table
+  Static.strtab
+ *)
 let translate e = 
     let e' = Past_to_ast.translate_expr e
     in let _ = peek "After translation" e' Ast.string_of_expr 

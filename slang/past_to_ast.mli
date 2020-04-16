@@ -1,3 +1,3 @@
 
-val translate_expr : Past.expr -> Ast.expr 
+val translate_expr : Past.expr -> Ast.expr
 

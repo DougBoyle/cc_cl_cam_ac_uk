@@ -5,6 +5,10 @@
 
 let get_loc = Parsing.symbol_start_pos 
 
+let current_tag = ref 0
+let next_tag s = let v = !current_tag in
+  (Static.strtab := (v,s)::!Static.strtab;  current_tag := !current_tag + 1; v)
+
 %}
 
 /* Tokens and types */
@@ -100,8 +104,8 @@ exprlist:
 
 /* Currently doesn't allow nested datastructures as type must be already defined */
 decloptions:
-| IDENT OF texpr { [($1, $3)] }
-| IDENT OF texpr BAR decloptions { ($1, $3)::$5 }
+| IDENT OF texpr { [($1, next_tag($1), $3)] }
+| IDENT OF texpr BAR decloptions { ($1, next_tag($1), $3)::$5 }
 
 /* For now treat all constructors as Name(Arg)
   Nil becomes Nil(unit), can do as syntactic sugar later.
@@ -114,8 +118,8 @@ decloptions:
 */
 
 matchlist:
-| IDENT LPAREN IDENT RPAREN ARROW expr { [($1, $3, $6)] }
-| IDENT LPAREN IDENT RPAREN ARROW expr BAR matchlist { ($1, $3, $6)::$8 }
+| IDENT LPAREN IDENT RPAREN ARROW expr { [($1, 0, $3, $6)] }
+| IDENT LPAREN IDENT RPAREN ARROW expr BAR matchlist { ($1, 0, $3, $6)::$8 }
 
 
 texpr:

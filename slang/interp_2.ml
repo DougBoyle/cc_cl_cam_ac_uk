@@ -34,7 +34,7 @@ type value =
      | INR of value 
      | CLOSURE of closure    
      | REC_CLOSURE of code
-     | TAGGED of string * value
+     | TAGGED of int * value
 
 and closure = code * env 
 
@@ -60,7 +60,7 @@ and instruction =
   | TEST of code * code
   | CASE of code * code
   | WHILE of code * code
-  | MKTAG of string
+  | MKTAG of int
 
 and code = instruction list 
 
@@ -97,7 +97,7 @@ let rec string_of_value = function
      | INR  v          -> "inr(" ^ (string_of_value v) ^ ")"
      | CLOSURE(cl) -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE(c) -> "REC_CLOSURE(" ^ (string_of_code c) ^ ")"
-     | TAGGED (s, v) -> s ^ "(" ^ (string_of_value v) ^ ")"
+     | TAGGED (i, v) -> (Static.resolve_name i)^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (c, env) = 
    "(" ^ (string_of_code c) ^ ", " ^ (string_of_env env) ^ ")"
@@ -128,7 +128,7 @@ and string_of_instruction = function
  | ASSIGN       -> "ASSIGN"
  | MK_CLOSURE c -> "MK_CLOSURE(" ^ (string_of_code c) ^ ")" 
  | MK_REC(f, c) -> "MK_REC(" ^ f ^ ", " ^ (string_of_code c) ^ ")"
- | MKTAG s -> "MKTAG " ^ s
+ | MKTAG i -> "MKTAG " ^ (Static.resolve_name i)
 
 and string_of_code c = string_of_list ";\n " string_of_instruction c 
 

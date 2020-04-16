@@ -57,9 +57,9 @@ type expr =
        | Let of loc * var * type_expr * expr * expr
        | LetFun of loc * var * lambda * type_expr * expr
        | LetRecFun of loc * var * lambda * type_expr * expr
-
-       | Decl of loc * string * (string * type_expr) list * expr
-       | Match of loc * expr * (string * var * expr) list
+        (*                                int = The tag assigned     *)
+       | Decl of loc * string * (string * int * type_expr) list * expr
+       | Match of loc * expr * (string * int * var * expr) list
 
 and lambda = var * type_expr * expr 
 
@@ -141,8 +141,8 @@ let pp_binary ppf op = fstring ppf (pp_bop op)
 
 let rec pp_lambda_list ppf = function
   | [] -> ()
-  | [(x,t)] -> fprintf ppf "%a of %a" fstring x pp_type t
-  | ((x,t)::xs) -> fprintf ppf "%a of %a | %a" fstring x pp_type t pp_lambda_list xs
+  | [(x,_,t)] -> fprintf ppf "%a of %a" fstring x pp_type t
+  | ((x,_,t)::xs) -> fprintf ppf "%a of %a | %a" fstring x pp_type t pp_lambda_list xs
 
 (* ignore locations *) 
 let rec pp_expr ppf = function 
@@ -188,8 +188,8 @@ let rec pp_expr ppf = function
 
 and pp_match_list ppf = function
   | [] -> ()
-  | [(s,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring s fstring x pp_expr e
-  | (s,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a" fstring s fstring x pp_expr e pp_match_list rest
+  | [(s,_,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring s fstring x pp_expr e
+  | (s,_,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a" fstring s fstring x pp_expr e pp_match_list rest
 
 let print_expr e = 
     let _ = pp_expr std_formatter e
@@ -285,10 +285,10 @@ and string_of_expr_list = function
 
 and string_of_lambda_list = function
   | [] -> ""
-  | [(x,t)] -> x ^ " of " ^ (string_of_type t)
-  | (x,t)::rest -> x ^ " of " ^ (string_of_type t) ^ " | " ^ (string_of_lambda_list rest)
+  | [(x,_,t)] -> x ^ " of " ^ (string_of_type t)
+  | (x,_,t)::rest -> x ^ " of " ^ (string_of_type t) ^ " | " ^ (string_of_lambda_list rest)
 
 and string_of_match_list = function
   | [] -> ""
-  | [(s,x,e)] -> s ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
-  | (s,x,e)::rest -> s ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)
+  | [(s,_,x,e)] -> s ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
+  | (s,_,x,e)::rest -> s ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)

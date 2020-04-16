@@ -29,8 +29,8 @@ type expr =
        | LetFun of var * lambda * expr
        | LetRecFun of var * lambda * expr
 
-       | Tagged of string * expr
-       | Match of expr * (string * var * expr) list
+       | Tagged of int * expr
+       | Match of expr * (int * var * expr) list
 
 and lambda = var * expr 
 
@@ -102,13 +102,14 @@ let rec pp_expr ppf = function
     | LetRecFun(f, (x, e1), e2)  -> 
          fprintf ppf "@[letrec %a(%a) =@ %a @ in %a @ end@]" 
                      fstring f fstring x  pp_expr e1 pp_expr e2
-    | Tagged(s, e) -> fprintf ppf "%a(%a)" fstring s pp_expr e
+    | Tagged(i, e) -> fprintf ppf "%a(%a)" fstring (Static.resolve_name i) pp_expr e
     | Match(e, l) -> fprintf ppf "match %a with %a end" pp_expr e pp_match_list l
 
 and pp_match_list ppf = function
   | [] -> ()
-  | [(s,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring s fstring x pp_expr e
-  | (s,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a" fstring s fstring x pp_expr e pp_match_list rest
+  | [(i,x,e)] -> fprintf ppf "%a(%a) -> %a" fstring (Static.resolve_name i) fstring x pp_expr e
+  | (i,x,e)::rest -> fprintf ppf "%a(%a) -> %a | %a"
+           fstring (Static.resolve_name i) fstring x pp_expr e pp_match_list rest
 
 and pp_expr_list ppf = function 
   | [] -> () 
@@ -181,7 +182,7 @@ let rec string_of_expr = function
 	      mk_con "" [x1; string_of_expr e1]; 
 	      mk_con "" [x2; string_of_expr e2]]
 
-	  | Tagged (s, e) -> mk_con s [string_of_expr e]
+	  | Tagged (i, e) -> mk_con (Static.resolve_name i) [string_of_expr e]
 	  | Match(e, l) -> mk_con "" [string_of_expr e; string_of_match_list l]
 
 and string_of_expr_list = function 
@@ -191,6 +192,6 @@ and string_of_expr_list = function
 
 and string_of_match_list = function
   | [] -> ""
-  | [(s,x,e)] -> s ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
-  | (s,x,e)::rest -> s ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)
+  | [(i,x,e)] -> (Static.resolve_name i) ^ "(" ^ x ^ ") -> " ^ (string_of_expr e)
+  | (i,x,e)::rest -> (Static.resolve_name i) ^ "(" ^ ") -> " ^ (string_of_expr e) ^ " | " ^ (string_of_match_list rest)
 

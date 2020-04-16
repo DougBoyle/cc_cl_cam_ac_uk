@@ -36,7 +36,7 @@ type value =
      | INR of value 
      | CLOSURE of location * env
      | REC_CLOSURE of location
-     | TAGGED of string * value
+     | TAGGED of int * value
 
 and instruction = 
   | PUSH of value 
@@ -63,7 +63,7 @@ and instruction =
   | GOTO of location
   | LABEL of label 
   | HALT
-  | MKTAG of string
+  | MKTAG of int
 
 and code = instruction list 
 
@@ -124,7 +124,7 @@ let rec string_of_value = function
      | INR  v          -> "inr(" ^ (string_of_value v) ^ ")"
      | CLOSURE (loc, c) -> "CLOSURE(" ^ (string_of_closure (loc, c)) ^ ")"
      | REC_CLOSURE(loc) -> "REC_CLOSURE(" ^ (string_of_location loc) ^ ")"
-     | TAGGED (s, v) -> s ^ "(" ^ (string_of_value v) ^ ")"
+     | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (loc, env) = 
    "(" ^ (string_of_location loc) ^ ", " ^ (string_of_env env) ^ ")"
@@ -162,7 +162,7 @@ and string_of_instruction = function
  | ASSIGN   -> "ASSIGN"
  | MK_CLOSURE loc  -> "MK_CLOSURE(" ^ (string_of_location loc) ^ ")"
  | MK_REC (v, loc) -> "MK_REC(" ^ v ^ ", " ^ (string_of_location loc) ^ ")"
- | MKTAG s -> "MKTAG " ^ s
+ | MKTAG i -> "MKTAG " ^ (Static.resolve_name i)
 
 and string_of_code c = string_of_list "\n " string_of_instruction c 
 

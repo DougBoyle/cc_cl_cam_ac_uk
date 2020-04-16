@@ -11,7 +11,7 @@ type value =
      | INR of value 
      | REC_CLOSURE of closure
      | CLOSURE of closure
-     | TAGGED of string * value
+     | TAGGED of int * value
 
 and closure = Ast.var * Ast.expr * env 
 
@@ -35,8 +35,8 @@ and continuation_action =
   | CASE of Ast.var * Ast.expr * Ast.var * Ast.expr * env 
   | APPLY of value 
   | ARG of Ast.expr * env
-  | MKTAG of string
-  | MATCH of (string * Ast.var * Ast.expr) list * env
+  | MKTAG of int
+  | MATCH of (int * Ast.var * Ast.expr) list * env
 
 and continuation = continuation_action  list
 

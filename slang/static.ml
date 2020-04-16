@@ -33,6 +33,14 @@ let report_type_mismatch (e1, t1) (e2, t2) =
 	      "at location " ^ loc1_str ^ "\nexpression " ^ e1_str ^ "\nhas type " ^ t1_str ^ 
 	      " and at location " ^ loc2_str ^ "\nexpression " ^ e2_str ^ "\nhas type " ^ t2_str)
 
+let strtab = ref []
+
+let rec resolve_aux i = function
+  | [] -> internal_error "Unknown index"
+  | (j,s)::rest -> if i = j then s else resolve_aux i rest
+
+let resolve_name i = resolve_aux i (!strtab)
+
 let rec find loc x = function 
   | [] -> complain (x ^ " is not defined at " ^ (string_of_loc loc)) 
   | (y, v) :: rest -> if x = y then v else find loc x rest
@@ -144,13 +152,25 @@ let make_case loc left right x1 x2 (e1, t1) (e2, t2) (e3, t3) =
       else report_types_not_equal loc left left' 
     | t -> report_expecting e1 "disjoint union" t
 
+let rec check_decl s = function
+  | [] -> complain "datatype not declared"
+  | (str, loc, l)::rest -> if str = s then TEcustom(s, loc) else check_decl s rest
+
+let rec get_index name str = function
+    | [] -> complain "Datatype not declared"
+    | (s, _, l)::rest -> if s = name then
+      (let rec aux = function
+        | [] -> internal_error "Unkown datatype instance"
+        | (s, n, _)::rest -> if s = str then n else aux rest
+      in aux l) else get_index name str rest
+
 (* Verifies that type used is actually defined at that point *)
-let rec valid_type loc decls = function
-  | TEcustom (s,_) -> TEcustom (s, find loc s decls)
-  | TEref t -> TEref (valid_type loc decls t)
-  | TEarrow (t1, t2) -> TEarrow (valid_type loc decls t1, valid_type loc decls t2)
-  | TEproduct (t1, t2) -> TEproduct (valid_type loc decls t1, valid_type loc decls t2)
-  | TEunion (t1, t2) -> TEunion (valid_type loc decls t1, valid_type loc decls t2)
+let rec valid_type decls = function
+  | TEcustom (s,_) -> check_decl s decls
+  | TEref t -> TEref (valid_type decls t)
+  | TEarrow (t1, t2) -> TEarrow (valid_type decls t1, valid_type decls t2)
+  | TEproduct (t1, t2) -> TEproduct (valid_type decls t1, valid_type decls t2)
+  | TEunion (t1, t2) -> TEunion (valid_type decls t1, valid_type decls t2)
   | t -> t
 
 let rec match_type_list loc = function
@@ -177,21 +197,21 @@ let rec infer env decls e =
     | Pair(loc, e1, e2)    -> make_pair loc (infer env decls e1) (infer env decls e2)
     | Fst(loc, e)          -> make_fst loc (infer env decls e)
     | Snd (loc, e)         -> make_snd loc (infer env decls e)
-    | Inl (loc, t, e)      -> let t' = valid_type loc decls t in
+    | Inl (loc, t, e)      -> let t' = valid_type decls t in
       make_inl loc t' (infer env decls e)
-    | Inr (loc, t, e)      -> let t' = valid_type loc decls t in
+    | Inr (loc, t, e)      -> let t' = valid_type decls t in
       make_inr loc t' (infer env decls e)
     | Case(loc, e, (x1, t1, e1), (x2, t2, e2)) ->
-      let t1' = valid_type loc decls t1 in let t2' = valid_type loc decls t2 in
+      let t1' = valid_type decls t1 in let t2' = valid_type decls t2 in
             make_case loc t1' t2' x1 x2 (infer env decls e) (infer ((x1, t1') :: env) decls e1)
                                                           (infer ((x2, t2') :: env) decls e2)
-    | Lambda (loc, (x, t, e)) -> let t' = valid_type loc decls t in
+    | Lambda (loc, (x, t, e)) -> let t' = valid_type decls t in
       make_lambda loc x t' (infer ((x, t') :: env) decls e)
     | App(loc, e1, e2)        -> make_app loc (infer env decls e1) (infer env decls e2)
-    | Let(loc, x, t, e1, e2)  -> let t' = valid_type loc decls t in
+    | Let(loc, x, t, e1, e2)  -> let t' = valid_type decls t in
       make_let loc x t' (infer env decls e1) (infer ((x, t') :: env) decls e2)
-    | LetFun(loc, f, (x, t1, body), t2, e) -> let t1' = valid_type loc decls t1 in
-      let t2' = valid_type loc decls t2 in
+    | LetFun(loc, f, (x, t1, body), t2, e) -> let t1' = valid_type decls t1 in
+      let t2' = valid_type decls t2 in
       let env1 = (f, TEarrow(t1', t2')) :: env in
       let p = infer env1 decls e  in
       let env2 = (x, t1') :: env in
@@ -204,13 +224,14 @@ let rec infer env decls e =
                     else report_types_not_equal loc bdy_t t2
          )
     | LetRecFun(_, _, _, _, _)  -> internal_error "LetRecFun found in parsed AST"
-    | Decl(loc, x, l, e) -> let decls' = (x,loc)::decls in (* loc tracks which datatype declaration for dup names *)
-      let env' = (List.map (fun (y, t) -> (y, TEarrow (valid_type loc decls' t, TEcustom(x, loc)))) l ) @ env in
+    | Decl(loc, x, l, e) -> let decls' = (x,loc, l)::decls in (* loc tracks which datatype declaration for dup names and tags *)
+      let env' = (List.map (fun (y, n, t) -> (y, TEarrow (valid_type decls' t, TEcustom(x, loc)))) l ) @ env in
       let (e', t) = infer env' decls' e in (Decl(loc, x, l, e'), t)
     | Match(loc, e, l) -> let (e', t) = infer env decls e in
-     let ts = List.map (fun (s,x,e) -> let t1 = find loc s env in
-         match t1 with TEarrow(t1', t2) -> if match_types (t, t2) then
-                      let (e',t') = infer ((x,t1')::env) decls e in ((s,x,e'), t')
+     let ts = List.map (fun (s,_,x,e) -> let t1 = find loc s env in
+         match t1 with TEarrow(t1', ((TEcustom(name, loc)) as t2)) -> if match_types (t, t2) then
+                     let tag = get_index name s decls in
+                      let (e',t') = infer ((x,t1')::env) decls e in ((s,tag,x,e'), t')
                         else report_types_not_equal loc t t2
                     | _ -> complain "Match expression only allowed on datatype instances" ) l in
          let t = match_type_list loc ts in (Match(loc, e, List.map (fun (a,b) -> a) ts), t)

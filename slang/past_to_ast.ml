@@ -65,8 +65,8 @@ let rec translate_expr = function
     | Past.Assign(_, e1, e2) -> Ast.Assign(translate_expr e1, translate_expr e2)
 
     | Past.Decl(_, x, l, e) -> List.fold_right
-      (fun (x,t) -> fun e -> Ast.LetFun(x, ("e", Ast.Tagged(x, Ast.Var("e"))), e)) l (translate_expr e)
-    | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (s,x,e) -> (s,x,translate_expr e)) l)
+      (fun (x,n,_) -> fun e -> Ast.LetFun(x, ("e", Ast.Tagged(n, Ast.Var("e"))), e)) l (translate_expr e)
+    | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (_,n,x,e) -> (n,x,translate_expr e)) l)
 
 and translate_lambda (x, _, body) = (x, translate_expr body) 
 

@@ -44,7 +44,7 @@ and value =
      | INL of value 
      | INR of value 
      | FUN of ((value * store) -> (value * store))
-     | TAGGED of string * value
+     | TAGGED of int * value
 
 type env = var -> value 
 
@@ -63,7 +63,7 @@ let rec string_of_value = function
      | INL v -> "inl(" ^ (string_of_value v) ^ ")"
      | INR  v -> "inr(" ^ (string_of_value v) ^ ")"
      | FUN _ -> "FUNCTION( ... )"
-     | TAGGED (t, v) -> t ^ "(" ^ (string_of_value v) ^ ")"
+     | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
     
 (* update : (env * binding) -> env 
    update : (store * (address * value)) -> store

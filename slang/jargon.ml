@@ -32,7 +32,7 @@ type heap_type =
   | HT_INL 
   | HT_INR 
   | HT_CLOSURE
-  | HT_TAG of string (* For x86, will need to make table of strings then use pointers to table *)
+  | HT_TAG of int (* For x86, will need to make table of strings then use pointers to table *)
 
 type heap_item = 
   | HEAP_INT of int 
@@ -71,7 +71,7 @@ type instruction =
   | GOTO of location
   | LABEL of label 
   | HALT
-  | MKTAG of string
+  | MKTAG of int
 
 type listing = instruction list 
 
@@ -125,7 +125,7 @@ let string_of_heap_type = function
     | HT_INL     -> "HT_INL"
     | HT_INR     -> "HT_INR"
     | HT_CLOSURE -> "HT_CLOSURE"
-    | HT_TAG s   -> "HT_TAG " ^ s
+    | HT_TAG i   -> "HT_TAG " ^ (Static.resolve_name i)
 
 
 let string_of_heap_item = function 
@@ -171,7 +171,7 @@ let string_of_instruction = function
  | MK_CLOSURE (loc, n)  
              -> "MK_CLOSURE(" ^ (string_of_location loc) 
 	                      ^ ", " ^ (string_of_int n) ^ ")"
- | MKTAG s  -> "MKTAG " ^ s
+ | MKTAG i  -> "MKTAG " ^ (Static.resolve_name i)
 
 let rec string_of_listing = function 
   | [] -> "\n"  
@@ -228,7 +228,7 @@ let rec string_of_heap_value a vm =
     | HT_INL -> "inl(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_INR -> "inr(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_CLOSURE -> "CLOSURE"
-    | HT_TAG s -> s ^ "(" ^ (string_of_heap_value (a+1) vm) ^ ")"
+    | HT_TAG i -> (Static.resolve_name i) ^ "(" ^ (string_of_heap_value (a+1) vm) ^ ")"
     )
 
 let string_of_value vm = 
