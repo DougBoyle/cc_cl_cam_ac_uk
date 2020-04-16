@@ -41,6 +41,8 @@ and instruction =
   | CASE of code * code
   | WHILE of code * code
   | MKTAG of int
+  | TEST_TAG of int
+  | MATCH_FAIL
 
 and code = instruction list 
 

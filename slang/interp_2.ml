@@ -61,6 +61,8 @@ and instruction =
   | CASE of code * code
   | WHILE of code * code
   | MKTAG of int
+  | TEST_TAG of int
+  | MATCH_FAIL
 
 and code = instruction list 
 
@@ -97,7 +99,7 @@ let rec string_of_value = function
      | INR  v          -> "inr(" ^ (string_of_value v) ^ ")"
      | CLOSURE(cl) -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE(c) -> "REC_CLOSURE(" ^ (string_of_code c) ^ ")"
-     | TAGGED (i, v) -> (Static.resolve_name i)^ "(" ^ (string_of_value v) ^ ")"
+     | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
 
 and string_of_closure (c, env) = 
    "(" ^ (string_of_code c) ^ ", " ^ (string_of_env env) ^ ")"
@@ -129,6 +131,8 @@ and string_of_instruction = function
  | MK_CLOSURE c -> "MK_CLOSURE(" ^ (string_of_code c) ^ ")" 
  | MK_REC(f, c) -> "MK_REC(" ^ f ^ ", " ^ (string_of_code c) ^ ")"
  | MKTAG i -> "MKTAG " ^ (Static.resolve_name i)
+ | TEST_TAG i -> "TEST_TAG(" ^  (Static.resolve_name i) ^ ")"
+ | MATCH_FAIL -> "MATCH_FAIL"
 
 and string_of_code c = string_of_list ";\n " string_of_instruction c 
 
@@ -270,6 +274,8 @@ let step = function
  | (APPLY :: ds,  V(CLOSURE (c, env)) :: (V v) :: evs, s) 
                                                    -> (c @ ds, (V v) :: (EV env) :: evs, s)
  | ((MKTAG tag)::ds,                (V v)::evs, s) -> (ds, V(TAGGED(tag, v))::evs, s)
+ | ((TEST_TAG i)::ds, ((V (TAGGED (j, v)))::evs as stack), s) -> (ds, V(BOOL (i = j))::(V v)::stack, s)
+ | (MATCH_FAIL::ds, _, _) -> complain "No match found\n"
  | state -> complain ("step : bad state = " ^ (string_of_interp_state state) ^ "\n")
 
 let rec driver n state = 
@@ -326,8 +332,14 @@ let rec compile = function
        (MK_REC(f, (BIND x) :: (compile body) @ leave_scope)) ::  
        (BIND f) :: 
        (compile e) @ leave_scope
- | Tagged (s, e) -> (compile e) @ [MKTAG s]
+ | Tagged (i, e) -> (compile e) @ [MKTAG i]
+ | Match(e, l) -> (compile e) @
+   (* SWAP POP removes TAGGED(i,v) from stack once match found *)
+   (List.fold_right (fun (i, x, e) -> fun c ->
+    [TEST_TAG i; TEST ([SWAP; POP; BIND x] @ (compile e) @ [SWAP; POP], POP :: c)])
+     l [MATCH_FAIL])
 
+ (*  l = (int, var, expr) list *)
 
 (* The initial Slang state is the Slang state : all locations contain 0 *) 
 

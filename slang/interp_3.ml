@@ -64,6 +64,7 @@ and instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | MATCH_FAIL
 
 and code = instruction list 
 
@@ -163,6 +164,7 @@ and string_of_instruction = function
  | MK_CLOSURE loc  -> "MK_CLOSURE(" ^ (string_of_location loc) ^ ")"
  | MK_REC (v, loc) -> "MK_REC(" ^ v ^ ", " ^ (string_of_location loc) ^ ")"
  | MKTAG i -> "MKTAG " ^ (Static.resolve_name i)
+ | MATCH_FAIL -> "MATCH_FAIL"
 
 and string_of_code c = string_of_list "\n " string_of_instruction c 
 
@@ -263,6 +265,7 @@ let step (cp, evs) =
  | (HALT,                              evs) -> (cp, evs) 
  | (GOTO (_, Some i),                  evs) -> (i, evs)
  | (MKTAG tag,                (V v) :: evs) -> (cp + 1, V(TAGGED(tag, v))::evs)
+ | (MATCH_FAIL, _) -> complain "No match found\n"
  | _ -> complain ("step : bad state = " ^ (string_of_state (cp, evs)) ^ "\n")
 
 (* COMPILE *) 
@@ -340,6 +343,7 @@ let rec comp = function
                       let f = new_label () in 
                       let def = [LABEL f ; BIND x] @ c @ [SWAP; POP; RETURN] in 
                           (def @ defs, [MK_CLOSURE((f, None))])
+
 (* 
  Note that we could have 
 

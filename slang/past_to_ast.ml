@@ -63,7 +63,7 @@ let rec translate_expr = function
     | Past.Ref(_, e) -> Ast.Ref(translate_expr e)
     | Past.Deref(_, e) -> Ast.Deref(translate_expr e)
     | Past.Assign(_, e1, e2) -> Ast.Assign(translate_expr e1, translate_expr e2)
-
+    (* TODO: Can likely optimise to not create a bunch of simple closures for each one *)
     | Past.Decl(_, x, l, e) -> List.fold_right
       (fun (x,n,_) -> fun e -> Ast.LetFun(x, ("e", Ast.Tagged(n, Ast.Var("e"))), e)) l (translate_expr e)
     | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (_,n,x,e) -> (n,x,translate_expr e)) l)
