@@ -251,7 +251,26 @@ let emit_x86 e =
     in let ret () = 
 	    (cmd "popq %rax"         "BEGIN return. put top-of-stack in %rax";
       	     cmd "ret"               "END retrun, this pops return address, jumps there \n")
-	    
+
+	  in let mktag i =
+    	 (let m = string_of_int i in
+    	  cmd "movq %r11,%rdi"        "BEGIN make tag, alloc arg 1 in %rdi";
+    	  cmd "movq $2,%rsi"          "alloc arg 2 in %rsi";
+    	  cmd "movq $0,%rax"          "signal no floating point args";
+    	  cmd "pushq %r11"            "%r11 is caller-saved ";
+    	  cmd "call alloc"            "alloc is a C-call, result in %rax";
+    	  cmd "popq %r11"             "restore %r11";
+    	  cmd ("movq $" ^ m ^ ",(%rax)") "save tag to heap";
+    	  cmd "popq %r10"             "copy value into scratch register";
+    	  cmd "movq %r10,8(%rax)"      "copy value to heap";
+    	  cmd "pushq %rax"            "END make tag, push heap pointer \n")
+
+    in let get i =
+    	 (let m = string_of_int (8*(i-1)) in (* i-1 as no headers in x86 version *)
+    	    cmd "movq (%rsp),%rax"      "BEGIN get, copy ref pointer to $aux";
+       	  cmd ("movq " ^ m ^ "(%rax),%rax")      "copy value to %rax";
+       	  cmd "pushq %rax"      "END get, push value to stack \n")
+
     (* emit command *) 	    
     in let emitc = function
 	  | UNARY op -> unary op 
@@ -283,7 +302,9 @@ let emit_x86 e =
 	  | PUSH (STACK_RA i)       -> complain "Internal Error : Jargon code never explicitly pushes return address"
 	  | PUSH (STACK_FP i)       -> complain "Internal Error : Jargon code never explicitly pushes frame pointer"
 	  | HALT                    -> complain "HALT found in Jargon code from Jargon.comp"
-	  | MKTAG _                 -> complain "Datatypes not yet implemented in x86"
+	  | MKTAG i                 -> mktag i
+	  | GET i                   -> get i
+	  | MATCH_FAIL              -> cmd "call match_exception"  "C call to terminate program";
 
     in let rec emitl = function [] -> () | c::l -> (emitc c; emitl l)
 

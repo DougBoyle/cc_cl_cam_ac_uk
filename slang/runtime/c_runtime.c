@@ -54,6 +54,11 @@ int64_t read() {
   return got;
 }
 
+void match_exception() {
+  fprintf(stderr, "No match found\n");
+  exit(1);
+}
+
 /* this is the name given to the compiled slang code. */
 /* "giria" is "slang" in Portuguese                   */
 int64_t giria(arena_t);
