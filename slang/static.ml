@@ -225,15 +225,26 @@ let rec infer env decls e =
          )
     | LetRecFun(_, _, _, _, _)  -> internal_error "LetRecFun found in parsed AST"
     | Decl(loc, x, l, e) -> let decls' = (x,loc, l)::decls in (* loc tracks which datatype declaration for dup names and tags *)
-      let env' = (List.map (fun (y, n, t) -> (y, TEarrow (valid_type decls' t, TEcustom(x, loc)))) l ) @ env in
+      let env' = (List.map (fun (y, n, t) ->
+                 match t with Some t1 -> (y, TEarrow (valid_type decls' t1, TEcustom(x, loc)))
+                            | None -> (y, TEcustom(x,loc)) ) l ) @ env in
       let (e', t) = infer env' decls' e in (Decl(loc, x, l, e'), t)
     | Match(loc, e, l) -> let (e', t) = infer env decls e in
      let ts = List.map (fun (s,_,x,e) -> let t1 = find loc s env in
+         ( match x with Some x -> (
          match t1 with TEarrow(t1', ((TEcustom(name, loc)) as t2)) -> if match_types (t, t2) then
                      let tag = get_index name s decls in
-                      let (e',t') = infer ((x,t1')::env) decls e in ((s,tag,x,e'), t')
+                      let (e',t') = infer ((x,t1')::env) decls e in ((s,tag,Some x,e'), t')
                         else report_types_not_equal loc t t2
-                    | _ -> complain "Match expression only allowed on datatype instances" ) l in
+                    | _ -> complain "Match expression only allowed on datatype instances" )
+         | None ->
+           match t1 with ((TEcustom(name, loc)) as t2) -> if match_types (t, t2) then
+                                let tag = get_index name s decls in
+                                 let (e',t') = infer env decls e in ((s,tag,None,e'), t')
+                                   else report_types_not_equal loc t t2
+                               | _ -> complain "Match expression only allowed on datatype instances" )
+
+         ) l in
          let t = match_type_list loc ts in (Match(loc, e, List.map (fun (a,b) -> a) ts), t)
 
 

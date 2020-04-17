@@ -104,22 +104,20 @@ exprlist:
 
 /* Currently doesn't allow nested datastructures as type must be already defined */
 decloptions:
-| IDENT OF texpr { [($1, next_tag($1), $3)] }
-| IDENT OF texpr BAR decloptions { ($1, next_tag($1), $3)::$5 }
+| decl { [$1] }
+| decl BAR decloptions { $1::$3 }
 
-/* For now treat all constructors as Name(Arg)
-  Nil becomes Nil(unit), can do as syntactic sugar later.
-   Also remove need for initial BAR
-
-   match e with
-   | Cons(x) -> e1
-   | Nil(y) -> e2
-
-*/
+decl:
+| IDENT OF texpr { ($1, next_tag($1), Some $3) }
+| IDENT          { ($1, next_tag($1), None) }
 
 matchlist:
-| IDENT LPAREN IDENT RPAREN ARROW expr { [($1, 0, $3, $6)] }
-| IDENT LPAREN IDENT RPAREN ARROW expr BAR matchlist { ($1, 0, $3, $6)::$8 }
+| matchelement { [$1] }
+| matchelement BAR matchlist { $1::$3 }
+
+matchelement:
+| IDENT LPAREN IDENT RPAREN ARROW expr { ($1, 0, Some $3, $6) }
+| IDENT ARROW expr { ($1, 0, None, $3) }
 
 
 texpr:
