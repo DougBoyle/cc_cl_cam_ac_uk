@@ -14,6 +14,7 @@ type value =
      | CLOSURE of closure    
      | REC_CLOSURE of code
      | TAGGED of int * value
+     | CONSTANT of int
 
 and closure = code * env 
 

@@ -68,6 +68,7 @@ type instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | MKCONST of int
   | GET of int
   | MATCH_FAIL
 

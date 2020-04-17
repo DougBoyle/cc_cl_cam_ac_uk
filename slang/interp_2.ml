@@ -35,6 +35,7 @@ type value =
      | CLOSURE of closure    
      | REC_CLOSURE of code
      | TAGGED of int * value
+     | CONSTANT of int
 
 and closure = code * env 
 
@@ -100,6 +101,7 @@ let rec string_of_value = function
      | CLOSURE(cl) -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE(c) -> "REC_CLOSURE(" ^ (string_of_code c) ^ ")"
      | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
+     | CONSTANT i -> Static.resolve_name i
 
 and string_of_closure (c, env) = 
    "(" ^ (string_of_code c) ^ ", " ^ (string_of_env env) ^ ")"
@@ -275,6 +277,7 @@ let step = function
                                                    -> (c @ ds, (V v) :: (EV env) :: evs, s)
  | ((MKTAG tag)::ds,                (V v)::evs, s) -> (ds, V(TAGGED(tag, v))::evs, s)
  | ((TEST_TAG i)::ds, ((V (TAGGED (j, v)))::evs as stack), s) -> (ds, V(BOOL (i = j))::(V v)::stack, s)
+ | ((TEST_TAG i)::ds, ((V (CONSTANT j))::evs as stack), s) -> (ds, V(BOOL (i = j))::(V UNIT)::stack, s)
  | (MATCH_FAIL::ds, _, _) -> complain "No match found\n"
  | state -> complain ("step : bad state = " ^ (string_of_interp_state state) ^ "\n")
 
@@ -333,10 +336,13 @@ let rec compile = function
        (BIND f) :: 
        (compile e) @ leave_scope
  | Tagged (i, e) -> (compile e) @ [MKTAG i]
+ | Constant i -> [PUSH (CONSTANT i)]
  | Match(e, l) -> (compile e) @
    (* SWAP POP removes TAGGED(i,v) from stack once match found, later removes bound x *)
    (List.fold_right (fun (i, x, e) -> fun c ->
-    [TEST_TAG i; TEST ([SWAP; POP; BIND x] @ (compile e) @ [SWAP; POP], POP :: c)])
+    match x with Some x ->
+    [TEST_TAG i; TEST ([SWAP; POP; BIND x] @ (compile e) @ [SWAP; POP], POP :: c)]
+    | None -> [TEST_TAG i; TEST ([POP; POP] @ (compile e), POP :: c)])
      l [MATCH_FAIL])
 
  (*  l = (int, var, expr) list *)

@@ -16,6 +16,7 @@ type value =
   | CLOSURE of location * env
   | REC_CLOSURE of location
   | TAGGED of int * value
+  | CONSTANT of int
 
 and instruction = 
   | PUSH of value 

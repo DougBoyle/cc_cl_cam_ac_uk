@@ -30,6 +30,7 @@ type value =
      | REC_CLOSURE of closure
      | CLOSURE of closure
      | TAGGED of int * value
+     | CONSTANT of int
 
 and closure = var * expr * env 
 
@@ -54,7 +55,7 @@ and continuation_action =
   | APPLY of value 
   | ARG of expr * env
   | MKTAG of int
-  | MATCH of (int * var * expr) list * env
+  | MATCH of (int * var option * expr) list * env
 
 and continuation = continuation_action  list
 
@@ -152,6 +153,7 @@ let rec string_of_value = function
      | CLOSURE cl     -> "CLOSURE(" ^ (string_of_closure cl) ^ ")"
      | REC_CLOSURE cl -> "REC_CLOSURE(" ^ string_of_closure cl ^ ")"
      | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
+     | CONSTANT i -> Static.resolve_name i
 
 and string_of_closure (x, e, env) = x ^ ", " ^ (Ast.string_of_expr e) ^  ", " ^ (string_of_env env)
 
@@ -245,6 +247,7 @@ let step = function
  | EXAMINE(Integer n,         _, k) -> COMPUTE(k, INT n)
  | EXAMINE(Boolean b,         _, k) -> COMPUTE(k, BOOL b) 
  | EXAMINE(Lambda(x, body), env, k) -> COMPUTE(k, mk_fun(x, body, env))
+ | EXAMINE(Constant i, env, k) -> COMPUTE(k, CONSTANT i)
  (* COMPUTE --> COMPUTE *) 
  | COMPUTE((UNARY op) :: k,    v) -> COMPUTE(k ,(do_unary(op, v)))
  | COMPUTE(OPER(op, v1) :: k, v2) -> COMPUTE(k, do_oper(op, v1, v2))
@@ -273,7 +276,8 @@ let step = function
  | COMPUTE(WHILE (e1, e2, env) :: k,     BOOL true)  -> EXAMINE(Seq [e2; e1], env, WHILE(e1, e2, env)::k)
  | COMPUTE((TAIL (el, env)) :: k,     _)  ->  EXAMINE(Seq el, env, k)
  | COMPUTE((MATCH((s,x,e)::rest, env))::k, TAGGED(tag,v)) -> if tag = s then
-    EXAMINE(e, update(env, (x, v)), k) else COMPUTE((MATCH(rest, env))::k, TAGGED(tag,v))
+   (match x with None -> EXAMINE(e, env, k) | Some x -> EXAMINE(e, update(env, (x, v)), k))
+     else COMPUTE((MATCH(rest, env))::k, TAGGED(tag,v))
  | COMPUTE((MATCH([], env))::rest, _) -> complain "No match found\n"
  | state -> complain ("step : malformed state = " ^ (string_of_state state) ^ "\n")
 

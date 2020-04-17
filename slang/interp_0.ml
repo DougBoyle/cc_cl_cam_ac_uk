@@ -45,6 +45,7 @@ and value =
      | INR of value 
      | FUN of ((value * store) -> (value * store))
      | TAGGED of int * value
+     | CONSTANT of int
 
 type env = var -> value 
 
@@ -64,6 +65,7 @@ let rec string_of_value = function
      | INR  v -> "inr(" ^ (string_of_value v) ^ ")"
      | FUN _ -> "FUNCTION( ... )"
      | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
+     | CONSTANT i -> Static.resolve_name i
     
 (* update : (env * binding) -> env 
    update : (store * (address * value)) -> store
@@ -178,8 +180,10 @@ let rec interpret (e, env, store) =
            if g = f then FUN (fun (v, s) -> interpret(body, update(new_env, (x, v)), s)) else env g
        in interpret(e, new_env, store)
     | Tagged (tag, e) -> let (v, s) = interpret(e, env, store) in (TAGGED(tag, v), s)
+    | Constant i -> (CONSTANT i, store)
     | Match (e, l) -> let (v, s) = interpret(e, env, store) in (match v with
-      | TAGGED (tag, v') -> let (x, e) = find tag l in interpret(e, update(env, (x,v')), s)
+      | TAGGED (tag, v') -> (match find tag l with (Some x, e) -> interpret(e, update(env, (x,v')), s) | _ -> complain "Invalid tag")
+      | CONSTANT tag -> let (_, e) = find tag l in interpret(e, env, s)
       | _ -> complain "Runtime error, match statement must be a datatype instance")
 
 

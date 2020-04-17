@@ -66,10 +66,9 @@ let rec translate_expr = function
     (* TODO: Can likely optimise to not create a bunch of simple closures for each one *)
     | Past.Decl(_, x, l, e) -> List.fold_right
       (fun (x,n,t) -> fun e ->
-      match t with None -> Ast.App(Ast.Lambda(x, e), Ast.Tagged(n, Ast.Unit))
+      match t with None -> Ast.App(Ast.Lambda(x, e), Ast.Constant(n))
                  | Some _ ->  Ast.LetFun(x, ("e", Ast.Tagged(n, Ast.Var("e"))), e)) l (translate_expr e)
-    | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (_,n,x,e) ->
-      match x with Some x -> (n,x,translate_expr e) | None -> (n,"_",translate_expr e)) l)
+    | Past.Match(_, e, l) -> Ast.Match(translate_expr e, List.map (fun (_,n,x,e) -> (n, x, translate_expr e)) l)
 
 and translate_lambda (x, _, body) = (x, translate_expr body) 
 

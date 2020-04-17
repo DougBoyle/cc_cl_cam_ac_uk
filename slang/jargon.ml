@@ -72,6 +72,7 @@ type instruction =
   | LABEL of label 
   | HALT
   | MKTAG of int
+  | MKCONST of int
   | GET of int (* Heap lookup but using value on top of stack, doesn't remove object used *)
   | MATCH_FAIL
 
@@ -174,6 +175,7 @@ let string_of_instruction = function
              -> "MK_CLOSURE(" ^ (string_of_location loc) 
 	                      ^ ", " ^ (string_of_int n) ^ ")"
  | MKTAG i  -> "MKTAG " ^ (Static.resolve_name i) ^ "_" ^ (string_of_int i)
+ | MKCONST i -> "MKCONST " ^ (Static.resolve_name i)
  | GET i -> "GET " ^ (string_of_int i)
  | MATCH_FAIL -> "MATCH_FAIL"
 
@@ -233,7 +235,8 @@ let rec string_of_heap_value a vm =
     | HT_INR -> "inr(" ^ (string_of_heap_value (a + 1) vm) ^ ")" 
     | HT_CLOSURE -> "CLOSURE"
     | HT_TAG -> (match vm.heap.(a+1) with
-      | HEAP_INT i -> (Static.resolve_name i) ^ "_" ^ (string_of_int i) ^ "(" ^ (string_of_heap_value (a+2) vm) ^ ")"
+      | HEAP_INT j -> if i = 3 then (Static.resolve_name j) ^ "(" ^ (string_of_heap_value (a+2) vm) ^ ")"
+                      else Static.resolve_name j
       | _ -> Errors.complain "Heap tagged object found with invalid tag"
     ))
 
@@ -493,6 +496,12 @@ let mk_tag vm i =
   let _ = Array.set vm2.heap (a+2) (stack_to_heap_item v) in
       push(STACK_HI a, vm2)
 
+let mk_constant vm i =
+  let (a, vm1) = allocate(2, vm) in
+  let _ = Array.set vm1.heap a (HEAP_HEADER (2, HT_TAG)) in
+  let _ = Array.set vm1.heap (a+1) (HEAP_INT i) in
+  push(STACK_HI a, vm1)
+
 let get vm i =
   match stack_top vm with
   | STACK_HI a -> let v = vm.heap.(a+i) in push(heap_to_stack_item v, vm)
@@ -526,6 +535,7 @@ let step vm =
   | TEST (_, Some i)  -> test(i, vm) 
   | CASE (_, Some i)  -> case(i, vm)
   | MKTAG i           -> advance_cp (mk_tag vm i)
+  | MKCONST i         -> advance_cp (mk_constant vm i)
   | GET i             -> advance_cp (get vm i)
   | MATCH_FAIL -> Errors.complain "No match found\n"
 
@@ -718,13 +728,20 @@ let rec comp vmap = function
                       let (defs2, c2) = comp_lambda vmap (Some f, x, e1) in
                           (defs1 @ defs2, c2 @ c1 @ [APPLY]) 
  | Tagged(i, e) -> let (defs, c) = comp vmap e in (defs, c @ [MKTAG i])
+ | Constant i -> ([], [MKCONST i])
+ (* TODO: Update to use option *)
  | Match(e, l) -> let (defs, c) = comp vmap e in
      let l1 = new_label() in
     let (defs1, c1) = (List.fold_right (fun (i, x, e) -> fun (d,c) ->
                        let l2 = new_label() in
+                match x with Some x ->
                        let (d1, c1) = comp_lambda vmap (None, x, e) in                         (* Tagged(i,v) on top -> v *)
                            (d1 @ d, [GET 1; PUSH (STACK_INT i); OPER EQI; TEST (l2, None); GET 2; SWAP; POP] @ c1 @
-                                    [APPLY; GOTO (l1, None); LABEL l2] @ c))
+                                    [APPLY; GOTO (l1, None); LABEL l2] @ c)
+                        | None -> let (d1, c1) = comp vmap e in
+                            (d1 @ d, [GET 1; PUSH (STACK_INT i); OPER EQI; TEST (l2, None);  POP] @ c1 @
+                                    [ GOTO (l1, None); LABEL l2] @ c)
+                        )
                             l ([], [MATCH_FAIL; LABEL l1]))
                        in (defs @ defs1, c @ c1)
 

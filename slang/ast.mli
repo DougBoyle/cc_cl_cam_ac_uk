@@ -32,7 +32,8 @@ type expr =
        | LetRecFun of var * lambda * expr
 
        | Tagged of int * expr
-       | Match of expr * (int * var * expr) list
+       | Constant of int
+       | Match of expr * (int * var option * expr) list
 
 and lambda = Past.var * expr 
 
@@ -44,4 +45,4 @@ val string_of_bop : oper -> string
 val print_expr : expr -> unit 
 val eprint_expr : expr -> unit
 val string_of_expr : expr -> string 
-val string_of_match_list : (int * string * expr) list -> string
+val string_of_match_list : (int * string option * expr) list -> string

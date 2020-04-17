@@ -37,6 +37,7 @@ type value =
      | CLOSURE of location * env
      | REC_CLOSURE of location
      | TAGGED of int * value
+     | CONSTANT of int
 
 and instruction = 
   | PUSH of value 
@@ -127,6 +128,7 @@ let rec string_of_value = function
      | CLOSURE (loc, c) -> "CLOSURE(" ^ (string_of_closure (loc, c)) ^ ")"
      | REC_CLOSURE(loc) -> "REC_CLOSURE(" ^ (string_of_location loc) ^ ")"
      | TAGGED (i, v) -> (Static.resolve_name i) ^ "(" ^ (string_of_value v) ^ ")"
+     | CONSTANT i -> Static.resolve_name i
 
 and string_of_closure (loc, env) = 
    "(" ^ (string_of_location loc) ^ ", " ^ (string_of_env env) ^ ")"
@@ -268,6 +270,7 @@ let step (cp, evs) =
  | (GOTO (_, Some i),                  evs) -> (i, evs)
  | (MKTAG tag,                (V v) :: evs) -> (cp + 1, V(TAGGED(tag, v))::evs)
  | (TEST_TAG i, ((V (TAGGED (j, v)))::evs as stack)) -> (cp+1, V(BOOL (i = j))::(V v)::stack)
+ | ((TEST_TAG i), ((V (CONSTANT j))::evs as stack)) -> (cp+1, V(BOOL (i = j))::(V UNIT)::stack)
  | (MATCH_FAIL, _) -> complain "No match found\n"
  | _ -> complain ("step : bad state = " ^ (string_of_state (cp, evs)) ^ "\n")
 
@@ -385,13 +388,18 @@ let rec comp = function
                           (def @ defs1 @ defs2, 
                            [MK_REC(f, (lab, None)); BIND f] @ c2 @ [SWAP; POP])
  | Tagged (s, e) -> let (defs, c) = comp e in (defs, c @ [MKTAG s])
+ | Constant i -> ([], [PUSH (CONSTANT i)])
  | Match(e, l) -> let (defs, c) = comp e in
    let l1 = new_label() in
    let (defs1, c1) = (List.fold_right (fun (i, x, e) -> fun (d,c) ->
                       let l2 = new_label() in
                       let (d1, c1) = comp e in
+                      match x with Some x ->
                           (d1 @ d, [TEST_TAG i; TEST (l2, None); SWAP; POP; BIND x] @ c1 @
-                                   [SWAP; POP; GOTO (l1, None); LABEL l2; POP] @ c) )
+                                   [SWAP; POP; GOTO (l1, None); LABEL l2; POP] @ c)
+                      | None -> (d1 @ d, [TEST_TAG i; TEST (l2, None); POP; POP] @ c1 @
+                                 [GOTO (l1, None); LABEL l2; POP] @ c)
+                                    )
                            l ([], [MATCH_FAIL; LABEL l1]))
                       in (defs @ defs1, c @ c1)
 

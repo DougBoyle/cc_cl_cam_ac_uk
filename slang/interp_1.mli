@@ -12,6 +12,7 @@ type value =
      | REC_CLOSURE of closure
      | CLOSURE of closure
      | TAGGED of int * value
+     | CONSTANT of int
 
 and closure = Ast.var * Ast.expr * env 
 
@@ -36,7 +37,7 @@ and continuation_action =
   | APPLY of value 
   | ARG of Ast.expr * env
   | MKTAG of int
-  | MATCH of (int * Ast.var * Ast.expr) list * env
+  | MATCH of (int * Ast.var option * Ast.expr) list * env
 
 and continuation = continuation_action  list
 

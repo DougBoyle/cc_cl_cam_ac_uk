@@ -14,6 +14,7 @@ and value =
      | INR of value 
      | FUN of ((value * store) -> (value * store))
      | TAGGED of int * value
+     | CONSTANT of int
 
 type env = Ast.var -> value 
 
